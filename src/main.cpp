@@ -707,15 +707,18 @@ void SendFileMenu()
     tftMenu.DisplayBanner();
     tftMenu.SetFont(12);
     int textPosition[2];
-    textPosition[0] = tftMenu.textPosition[0];
+    textPosition[0] = 0;
     textPosition[1] = tftMenu.fontHeight;
-    bool sendResult = ftpClient.UploadFileFromSDtoFTPServer(fileNameToSend, fileNameToSend);
-
-    tftDisplay.fillScreen(TFT_WHITE);
-    tftMenu.DisplayBanner ();
-    tftMenu.SetFont(12);
+    sprintf(outStr, "Sending %s...", fileNameToSend);
+    tftDisplay.drawString(outStr, textPosition[0], textPosition[1], GFXFF);
     textPosition[1] += tftMenu.fontHeight;
-    sprintf(outStr, "Sent %s with result %s", fileNameToSend, sendResult ? "OK" : "ERROR");
+    // send the file to the FTP server
+    bool sendResult = ftpClient.UploadFileFromSDtoFTPServer(fileNameToSend, fileNameToSend);
+    // display result on TFT
+    sprintf(outStr, "Sent %s", fileNameToSend);
+    tftDisplay.drawString(outStr, textPosition[0], textPosition[1], GFXFF);
+    textPosition[1] += tftMenu.fontHeight;
+    sprintf(outStr, "Result %s", sendResult ? "OK" : "ERROR");
     tftDisplay.drawString(outStr, textPosition[0], textPosition[1], GFXFF);
     textPosition[1] += tftMenu.fontHeight;
     tftDisplay.drawString("Press any button to continue", textPosition[0], textPosition[1], GFXFF);

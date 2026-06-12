@@ -1,9 +1,7 @@
+#include <Arduino.h>
 #include "FTPClient.h"
 #include "WiFiSecrets.h"
-#include <Arduino.h>
 #include <SD.h>
-#include <TFT_eSPI.h>     // https://github.com/Bodmer/TFT_eSPI Graphics and font library for ST7735 driver chip
-#include "Free_Fonts.h"  // Include the header file attached to this sketch
 
 
 static bool WriteAllToFTPClient(WiFiClient& client, const uint8_t* buffer, size_t length, unsigned long timeoutMs = 5000) 
@@ -126,7 +124,8 @@ String FTPClient::ReadFTPResponse() {
         }
     }
 
-    if (!finished) {
+    if (!finished) 
+    {
         Serial.println("\nERROR: Response timeout or incomplete");
         Serial.print("Received so far: >>>");
         Serial.print(response);
