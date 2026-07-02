@@ -1,3 +1,5 @@
+## YamuraLog Hub
+
 ## Hardware
 - Teensy 4.0 (could also run on a Teensy 4.1 and use internal micorSD card)
 - Waveshare SN65HVD230 CAN tranciever
