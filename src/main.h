@@ -42,6 +42,7 @@
 #define DELETE_LOG_FILES 6
 #define DELETE_ALL_FILES 7
 #define LIST_FILES 8
+#define SEND_LAST_FILE 9
 
 // current state of logger
 int deviceState = 0;
@@ -230,3 +231,4 @@ void SendFileMenu();
 void ListFiles(File dir);
 void DeleteAllFiles(File dir);
 void DeleteLogFiles(File dir);
+void SendFile(char* fileNameToSend);

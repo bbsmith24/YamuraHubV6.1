@@ -392,13 +392,8 @@ void setup()
      tftMenu.textPosition[1] += tftMenu.fontHeight;
     tftMenu.DrawString(outStr, tftMenu.textPosition[0], tftMenu.textPosition[1], GFXFF);
     canFD.mailboxStatus();
-    // progress bar for file transfer
-    //xferProgressBar.CreateProgressBar(2, screenSize[1] - 60, screenSize[0] - 2, screenSize[1] - 40, TFT_WHITE, TFT_BLUE, TFT_BLACK, screenRotation, true, &tftDisplay);
-    // Serial.println("\n==========================================");
-    // Serial.println(  "* FTP demo complete                      *");
-    // Serial.println(  "* CAN FD setup complete                  *");
-    // Serial.println(  "* Entering idle loop.                    *");
-    // Serial.println(  "==========================================\n");
+
+    sprintf(sdLogFileName, "-");
 }
 ///
 ///
@@ -420,6 +415,10 @@ void loop()
       break;
     case START_LOGGING:
       StartLogging();
+      deviceState = DISPLAY_MENU;
+      break;
+    case SEND_LAST_FILE:
+      SendFile(sdLogFileName);
       deviceState = DISPLAY_MENU;
       break;
     case SEND_FILE:
@@ -463,18 +462,26 @@ void MainMenu()
     #ifdef DEBUG_EXTRA_VERBOSE
     Serial.println("MainMenu() - displaying main menu");
     #endif
-    int menuCount = 5;
+    sprintf(outStr, "Send Last File (%s)", sdLogFileName);
+    int menuCount = 6;
     TFTMenu::MenuChoice mainMenuChoices[6];
     mainMenuChoices[0].description = "Start Logging";
     mainMenuChoices[0].result = START_LOGGING;
-    mainMenuChoices[1].description = "Select Driver";
-    mainMenuChoices[1].result = SELECT_DRIVER;
-    mainMenuChoices[2].description = "Send File";
-    mainMenuChoices[2].result = SEND_FILE;
-    mainMenuChoices[3].description = "Get File";
-    mainMenuChoices[3].result = GET_FILE;
-    mainMenuChoices[4].description = "Settings";
-    mainMenuChoices[4].result = CHANGE_SETTINGS;
+    //
+    mainMenuChoices[1].description = outStr;
+    mainMenuChoices[1].result = SEND_LAST_FILE;
+    //
+    mainMenuChoices[2].description = "Select Driver";
+    mainMenuChoices[2].result = SELECT_DRIVER;
+    //
+    mainMenuChoices[3].description = "Send File";
+    mainMenuChoices[3].result = SEND_FILE;
+    //
+    mainMenuChoices[4].description = "Get File";
+    mainMenuChoices[4].result = GET_FILE;
+    //
+    mainMenuChoices[5].description = "Settings";
+    mainMenuChoices[5].result = CHANGE_SETTINGS;
     deviceState = tftMenu.MenuSelect(12, mainMenuChoices, menuCount, START_LOGGING);
 }
 //
@@ -560,17 +567,38 @@ void StartLogging()
 //
 void SendFileMenu()
 {
+    char fileNameToSend[64];
+    // get the file name to send from the user through the TFT menu
+    SelectLocalFile(fileNameToSend);
+    SendFile(fileNameToSend);
+}
+//
+//
+//
+void SendFile(char* fileNameToSend)
+{
+    char fileNameToSendSize[64];
+
+    String fileNameStrToSend = fileNameToSend;
+    int spaceIdx = fileNameStrToSend.indexOf(".");
+    if(spaceIdx == -1)
+    {
+      sprintf(outStr, "No recent file - record first");
+      tftMenu.NotImplementedScreen(outStr);
+      #ifdef DEBUG_VERBOSE
+      Serial.println("SendFile() - Invalid file name, no extension found");
+      #endif
+      deviceState = DISPLAY_MENU;
+      return;
+    }
+
+    // stop heartbeat before file upload to FTP server
     #ifdef DEBUG_VERBOSE
     Serial.println("Stop heartbeat timer to send file to FTP server");
     #endif
-    timer.end();  // stop heartbeat before file upload to FTP server
-    char fileNameToSend[64];
-    char fileNameToSendSize[64];
-    // get the file name to send from the user through the TFT menu
-    SelectLocalFile(fileNameToSend);
+    timer.end();  
+
     // clean up the file name - split on space between name and size
-    String fileNameStrToSend = fileNameToSend;
-    int spaceIdx = fileNameStrToSend.indexOf(".");
     spaceIdx = fileNameStrToSend.indexOf(" ", spaceIdx);
     strcpy(fileNameToSend, fileNameStrToSend.substring(0, spaceIdx).c_str());
     strcpy(fileNameToSendSize, fileNameStrToSend.substring(spaceIdx).c_str());
