@@ -1,4 +1,5 @@
 ## YamuraLog Hub
+Control for YamuraLog sensor network. Start/Stop logging, save log file to microSD, handle FTP communications with data viewer
 
 ## Hardware
 - Teensy 4.0 (could also run on a Teensy 4.1 and use internal micorSD card)
