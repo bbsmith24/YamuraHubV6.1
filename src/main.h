@@ -20,8 +20,8 @@
 #define SD_CS               3  // SD card CS pin
 
 // TFT display pin configuration for Teensy 4.0 with ST7735 display
-#define TFT_MISO 12   // and microSD MISO
 #define TFT_MOSI 11   // and microSD MOSI
+#define TFT_MISO 12   // and microSD MISO
 #define TFT_SCLK 13   // and microSD SCLK
 #define TFT_CS   15   // TFT chip select control pin
 #define TFT_DC    2   // Data Command control pin
@@ -39,6 +39,10 @@
 #define SEND_FILE 3
 #define GET_FILE 4
 #define CHANGE_SETTINGS 5
+#define DELETE_LOG_FILES 6
+#define DELETE_ALL_FILES 7
+#define LIST_FILES 8
+
 // current state of logger
 int deviceState = 0;
 bool logData = false;
@@ -197,7 +201,7 @@ IntervalTimer timer2;
 // not defined yet
 
 //#endif
-
+File root;
 // function prototypes
 void MainMenu();
 void SelectDriverMenu();
@@ -223,3 +227,6 @@ void ShowGPSStatus(bool gpsActive, int gpsSIV);
 int  GetNextLogFileIdx();
 void SelectLocalFile(char *selectedFile);
 void SendFileMenu();
+void ListFiles(File dir);
+void DeleteAllFiles(File dir);
+void DeleteLogFiles(File dir);

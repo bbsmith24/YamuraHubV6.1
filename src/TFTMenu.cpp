@@ -7,7 +7,9 @@
 //
 int TFTMenu::MenuSelect(int fontSize, MenuChoice choices[], int menuCount, int initialSelect) 
 {
+    #ifdef DEBUG_EXTRA_VERBOSE
     Serial.println("MenuSelect called");
+    #endif
     char outStr[256];
     // location of text
     textPosition[0] = 5;
@@ -28,14 +30,18 @@ int TFTMenu::MenuSelect(int fontSize, MenuChoice choices[], int menuCount, int i
         buttons[btnIdx].buttonReleased = false;
     }
     // erase screen, draw banner
+    #ifdef DEBUG_EXTRA_VERBOSE
     Serial.println("MenuSelect clear screen and draw banner");
+    #endif
     tftDisplay->fillScreen(TFT_WHITE);
     DisplayBanner();
     tftDisplay->setFreeFont(FSS12);
     fontHeight = tftDisplay->fontHeight(GFXFF);
     textPosition[0] = 50;
     textPosition[1] = 20;
+    #ifdef DEBUG_EXTRA_VERBOSE
     Serial.println("setTextColor(TFT_BLACK, TFT_WHITE)");
+    #endif
     tftDisplay->setTextColor(TFT_BLACK, TFT_WHITE);
 
     // loop until selection is made
@@ -45,7 +51,9 @@ int TFTMenu::MenuSelect(int fontSize, MenuChoice choices[], int menuCount, int i
     int displayRange[2] = { 0, linesToDisplay - 1 };
     displayRange[1] = (menuCount < linesToDisplay ? menuCount : linesToDisplay) - 1;
     // display menu
+    #ifdef DEBUG_EXTRA_VERBOSE
     Serial.println("setTextColor(TFT_BLACK, TFT_WHITE)");
+    #endif
     tftDisplay->setTextColor(TFT_BLACK, TFT_WHITE);
     while (true) 
     {
@@ -54,19 +62,21 @@ int TFTMenu::MenuSelect(int fontSize, MenuChoice choices[], int menuCount, int i
         for (int menuIdx = displayRange[0]; menuIdx <= displayRange[1]; menuIdx++) 
         {
             sprintf(outStr, "selection %d: %s", menuIdx, choices[menuIdx].description.c_str());
+            #ifdef DEBUG_EXTRA_VERBOSE
             Serial.println(outStr);
+            #endif
             tftDisplay->fillRect(textPosition[0], textPosition[1], tftDisplay->width(), fontHeight, TFT_WHITE);
             if (menuIdx == selection) 
             {
                 tftDisplay->drawString(">", textPosition[0], textPosition[1], GFXFF);
-                sprintf(outStr, ">%s", choices[menuIdx].description.c_str());
+                sprintf(outStr, ">>>%s", choices[menuIdx].description.c_str());
             }
             else
             {
-                sprintf(outStr, " %s", choices[menuIdx].description.c_str());
+                sprintf(outStr, "   %s", choices[menuIdx].description.c_str());
             }
             textPosition[0] = fontWidth;
-            sprintf(outStr, "%s", choices[menuIdx].description.c_str());
+            sprintf(outStr, "   %s", choices[menuIdx].description.c_str());
             tftDisplay->drawString(outStr, textPosition[0], textPosition[1], GFXFF);
             textPosition[0] = 0;
             textPosition[1] += fontHeight;
@@ -78,16 +88,25 @@ int TFTMenu::MenuSelect(int fontSize, MenuChoice choices[], int menuCount, int i
             // selection made, set state and break
             if (buttons[0].buttonReleased) 
             {
-                Serial.println("MenuSelect button 0 released, selection made");
+                #ifdef DEBUG_EXTRA_VERBOSE
+                Serial.print(">>>>>MenuSelect button 0 released, selection index ");
+                Serial.print(selection);
+                Serial.print(" made, returning result: ");
+                Serial.println(choices[selection].result);
+                #endif
                 buttons[0].buttonReleased = false;
                 return choices[selection].result;
             }
             // change selection down, break
             else if (buttons[1].buttonReleased) 
             {
-                Serial.println("MenuSelect button 1 released, changing selection down");
                 buttons[1].buttonReleased = false;
                 selection = (selection + 1) < menuCount ? (selection + 1) : 0;
+                #ifdef DEBUG_EXTRA_VERBOSE
+                Serial.print("MenuSelect button 1 released, changing selection down to index ");
+                Serial.println(selection);
+                #endif
+
                 // handle loop back to start
                 if (selection < displayRange[0]) 
                 {
@@ -105,9 +124,12 @@ int TFTMenu::MenuSelect(int fontSize, MenuChoice choices[], int menuCount, int i
             // change selection up, break
             else if (buttons[2].buttonReleased) 
             {
-                Serial.println("MenuSelect button 2 released, changing selection up");
                 buttons[2].buttonReleased = false;
                 selection = (selection - 1) >= 0 ? (selection - 1) : menuCount - 1;
+                #ifdef DEBUG_EXTRA_VERBOSE
+                Serial.print("MenuSelect button 2 released, changing selection up to index ");
+                Serial.println(selection);
+                #endif
                 // handle loop back to start
                 if (selection < displayRange[0]) 
                 {
@@ -130,8 +152,10 @@ int TFTMenu::MenuSelect(int fontSize, MenuChoice choices[], int menuCount, int i
             delay(100);
         }
     }
+    #ifdef DEBUG_EXTRA_VERBOSE
     Serial.print("MenuSelect result: ");
     Serial.println(choices[selection].result);
+    #endif
     return choices[selection].result;
 }
 //
@@ -148,28 +172,28 @@ void TFTMenu::CheckButtons(unsigned long curTime)
             buttons[btnIdx].lastChange = curTime;
             if (curState == BUTTON_PRESSED) 
             {
-            buttons[btnIdx].buttonPressed = 1;
-            buttons[btnIdx].buttonReleased = 0;
-            buttons[btnIdx].buttonLast = BUTTON_PRESSED;
-            buttons[btnIdx].pressDuration = 0;
+                buttons[btnIdx].buttonPressed = 1;
+                buttons[btnIdx].buttonReleased = 0;
+                buttons[btnIdx].buttonLast = BUTTON_PRESSED;
+                buttons[btnIdx].pressDuration = 0;
             }
             else if (curState == BUTTON_RELEASED) 
             {
-            buttons[btnIdx].buttonPressed = 0;
-            buttons[btnIdx].buttonReleased = 1;
-            buttons[btnIdx].buttonLast = BUTTON_RELEASED;
-            buttons[btnIdx].releaseDuration = 0;
+                buttons[btnIdx].buttonPressed = 0;
+                buttons[btnIdx].buttonReleased = 1;
+                buttons[btnIdx].buttonLast = BUTTON_RELEASED;
+                buttons[btnIdx].releaseDuration = 0;
             }
         } 
         else 
         {
             if (curState == BUTTON_PRESSED) 
             {
-            buttons[btnIdx].pressDuration = curTime - buttons[btnIdx].lastChange;
+                buttons[btnIdx].pressDuration = curTime - buttons[btnIdx].lastChange;
             } 
             else if (curState == BUTTON_RELEASED) 
             {
-            buttons[btnIdx].releaseDuration = curTime - buttons[btnIdx].lastChange;
+                buttons[btnIdx].releaseDuration = curTime - buttons[btnIdx].lastChange;
             }
         }
     }
@@ -242,14 +266,18 @@ void TFTMenu::WaitForAnyButton()
 //
 void TFTMenu::NotImplementedScreen(String messageStr)
 {
+    #ifdef DEBUG_EXTRA_VERBOSE
     Serial.println("NotImplementedScreen() - displaying not implemented screen");
+    #endif
     tftDisplay->fillScreen(TFT_WHITE);
     DisplayBanner();
     tftDisplay->setFreeFont(FSS12);
     fontHeight = tftDisplay->fontHeight(GFXFF);
     textPosition[0] = 50;
     textPosition[1] = 20;
+    #ifdef DEBUG_EXTRA_VERBOSE
     Serial.println("setTextColor(TFT_BLACK, TFT_WHITE)");
+    #endif
     tftDisplay->setTextColor(TFT_BLACK, TFT_WHITE);
 
     tftDisplay->drawString("Menu handler for", textPosition[0], textPosition[1], GFXFF);
@@ -269,8 +297,10 @@ void TFTMenu::NotImplementedScreen(String messageStr)
 //
 void TFTMenu::DisplayBanner()
 {
+    #ifdef DEBUG_EXTRA_VERBOSE
     Serial.println("DisplayBanner() - Displaying banner on TFT display...");
     Serial.println("setTextColor(~TFT_BLACK, ~TFT_YELLOW)");
+    #endif
     tftDisplay->setTextColor(~TFT_BLACK, ~TFT_YELLOW);
     SetFont(9);
     int xPos = tftDisplay->width() / 2;
@@ -280,7 +310,9 @@ void TFTMenu::DisplayBanner()
     tftDisplay->setTextDatum(TL_DATUM);
     tftDisplay->setFreeFont(FSS12);
     fontHeight = tftDisplay->fontHeight(GFXFF);
+    #ifdef DEBUG_EXTRA_VERBOSE
     Serial.println("setTextColor(TFT_BLACK, TFT_WHITE)");
+    #endif
     tftDisplay->setTextColor(TFT_BLACK, TFT_WHITE);
 }
 //
@@ -315,7 +347,9 @@ void TFTMenu::SetFont(int fontSize)
 void TFTMenu::SetScreenRotation(int rotVal) 
 {
     char outStr[256];
+    #ifdef DEBUG_EXTRA_VERBOSE
     Serial.println("SetScreenRotation() - Setting screen rotation...");
+    #endif
     tftDisplay->setRotation(rotVal);
     screenRotation = rotVal;
     if ((rotVal == 0) || (rotVal == 2)) 
@@ -328,25 +362,35 @@ void TFTMenu::SetScreenRotation(int rotVal)
         screenSize[0] = TFT_HEIGHT;
         screenSize[1] = TFT_WIDTH;
     }
+    #ifdef DEBUG_EXTRA_VERBOSE
     sprintf(outStr, "SetScreen(%d)", rotVal);
     Serial.println(outStr);
     sprintf(outStr, "Screen size\tW %d\tH %d", screenSize[0], screenSize[1]);
     Serial.println(outStr);
+    #endif
 }
 //
 //
 //
 void TFTMenu::TFTInitialization()
 {
+    #ifdef DEBUG_EXTRA_VERBOSE
     Serial.println("\nInitialize TFT Display");
     Serial.println("init()");
+    #endif
     tftDisplay->init();
+    #ifdef DEBUG_EXTRA_VERBOSE
     Serial.println("invertDisplay(true)");
+    #endif
     tftDisplay->invertDisplay(true);  // invert colors, not orientation
+    #ifdef DEBUG_EXTRA_VERBOSE
     Serial.println("fillScreen(TFT_WHITE)");
+    #endif
     tftDisplay->fillScreen(TFT_WHITE);
     SetScreenRotation(1);
+    #ifdef DEBUG_EXTRA_VERBOSE
     Serial.println("Initialized TFT Display");
+    #endif
     DisplayBanner();
     delay(2000);
 }
@@ -355,8 +399,10 @@ void TFTMenu::TFTInitialization()
 //
 void TFTMenu::DrawString(String messageStr, int xPos, int yPos, int font)
 {
+    #ifdef DEBUG_EXTRA_VERBOSE
     Serial.println("DrawString() - Drawing string on TFT display...");
     Serial.println("DrawString() - Drawing string on TFT display...");
+    #endif
     SetFont(font);
     tftDisplay->drawString(messageStr, textPosition[0], textPosition[1], GFXFF);
     textPosition[1] += fontHeight;

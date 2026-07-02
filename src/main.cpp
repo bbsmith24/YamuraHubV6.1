@@ -38,7 +38,7 @@
 //  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 //  SOFTWARE.
 // 
-//#define DEBUG_VERBOSE
+#define DEBUG_VERBOSE
 //#define DEBUG_EXTRA_VERBOSE
 
 #include "main.h"        // Contains pin definitions
@@ -122,7 +122,7 @@ void setup()
         delay(10);
     }
     #ifdef DEBUG_VERBOSE
-    Serial.println("\n====================================================");
+    Serial.println("\n=====================================================");
     Serial.println(  "* Teensy FTP Client with AirLift WiFi - C++ Version *");
     Serial.println(  "=====================================================\n");
     #endif
@@ -259,29 +259,8 @@ void setup()
     }
     Serial.println("==================================");
     #endif
-//   // Connect to WiFi
-//   Serial.print("Connecting to WiFi network '");
-//   Serial.print(SSID);
-//   Serial.print("'... ");
-//
-//    int status = WiFi.begin(SSID, PASSWORD);
-//    if (status != WL_CONNECTED) {
-//        Serial.println("FAILED");
-//        Serial.print("ERROR: WiFi connection failed, status = ");
-//        Serial.println(status);
-//        while (true) {
-//            delay(1000);
-//        }
-//    }
-//
-//    Serial.println("OK");
-//    Serial.print("Connected to: ");
-//    Serial.println(SSID);
-//    Serial.print("IP address: ");
-//    Serial.println(WiFi.localIP());
-//    Serial.println();
-//
-//    // Initialize SD card
+    
+    // Initialize SD card
     #ifdef DEBUG_VERBOSE
     Serial.print("Initializing SD card...");
     #endif
@@ -298,70 +277,13 @@ void setup()
     }
     #ifdef DEBUG_VERBOSE
     Serial.println("SD card initialized successfully");
+    root = SD.open("/");
+    ListFiles(root);
+    root.close();
+
     #endif
     // Initialize TFT display
     tftMenu.TFTInitialization();
-
-//    // Connect to FTP server
-//    Serial.print("Connecting to FTP server '");
-//    Serial.print(FTP_SERVER);
-//    Serial.println("'...");
-//
-//    if (!ftpClient.FTPConnect(FTP_SERVER, 21, FTP_USER, FTP_PASS)) {
-//        Serial.println("ERROR: FTP connection failed!");
-//        while (true) {
-//            delay(1000);
-//        }
-//    }
-//
-//    Serial.println("\n--- Testing FTP Operations ---\n");
-//
-//    // Test 1: List remote directory
-//    Serial.println("[1] Listing remote directory...");
-//    if (!ftpClient.ListFTPServerDirectory(FTP_PATH)) 
-//    {
-//        Serial.println("WARNING: Remote directory listing failed");
-//    }
-//    Serial.println();
-//
-//    // Test 1a: List local directory
-//    Serial.println("[1a] Listing local directory...");
-//     if (ftpClient.ListLocalDirectory("/"))
-//     {
-//        Serial.println("WARNING: Local directory listing failed");
-//     }
-//    Serial.println();
-//
-//    // Test 2: Upload file
-//    Serial.println("[2] Uploading file...");
-//    size_t contentSize = strlen(UPLOAD_FILE_CONTENT);
-//    if (!ftpClient.UploadFileToFTPServer(UPLOAD_FILE_NAME, 
-//                              reinterpret_cast<const uint8_t*>(UPLOAD_FILE_CONTENT), 
-//                              contentSize)) {
-//        Serial.println("WARNING: File upload failed");
-//    } else {
-//        Serial.println("File upload successful");
-//    }
-//    Serial.println();
-//
-//    // Test 3: Download file
-//    Serial.println("[3] Downloading file to SD card...");
-//    if (!ftpClient.DownloadFileFromFTPServerToSD(DOWNLOAD_FILE_NAME, DOWNLOAD_FILE_PATH)) {
-//        Serial.println("WARNING: File download failed");
-//    } else {
-//        Serial.println("File download complete and stored to SD card");
-//    }
-//    Serial.println();
-//
-//    // test 4: upload file from SD card (if SD card support is implemented and available)
-//    Serial.println("[4] Uploading file from SD card...");    
-//    ftpClient.UploadFileFromSDtoFTPServer(SD_UPLOAD_FILE_NAME, SD_UPLOAD_FILE_PATH);
-//    Serial.println("SD card file upload attempted (check FTP server for result)");  
-//
-//
-//    // Disconnect from FTP server
-//    Serial.println("--- Disconnecting from FTP server ---");
-//    ftpClient.FTPDisconnect();
 
     // CAN-FD setup
     canFD.begin();
@@ -483,6 +405,10 @@ void setup()
 ///
 void loop() 
 {
+  #ifdef DEBUG_EXTRA_VERBOSE
+  Serial.print("loop() current deviceState: ");
+  Serial.println(deviceState);
+  #endif
   switch (deviceState)
   {
     case DISPLAY_MENU:
@@ -506,85 +432,35 @@ void loop()
       break;
     case CHANGE_SETTINGS:
       ChangeSettingsMenu();
+      break;
+    case DELETE_LOG_FILES:
+      Serial.println("DeleteLogFiles() - deleting log files");  
+      root = SD.open("/");
+      DeleteLogFiles(root);
+      deviceState = DISPLAY_MENU;
+      break;
+    case DELETE_ALL_FILES:
+      Serial.println("DeleteAllFiles() - deleting all files");  
+      root = SD.open("/");
+      DeleteAllFiles(root);
+      deviceState = DISPLAY_MENU;
+      break;
+    case LIST_FILES:
+      Serial.println("ListFiles() - listing files");  
+      root = SD.open("/");
+      ListFiles(root);
       deviceState = DISPLAY_MENU;
       break;
     default:
       break;
   }
 }
-// //
-// // Set the TFT screen rotation and update global variables accordingly
-// //
-// void SetScreenRotation(int rotVal) 
-// {
-//     Serial.println("SetScreenRotation() - Setting screen rotation...");
-//     tftDisplay.setRotation(rotVal);
-//     screenRotation = rotVal;
-//     if ((rotVal == 0) || (rotVal == 2)) 
-//     {
-//         screenSize[0] = TFT_WIDTH;
-//         screenSize[1] = TFT_HEIGHT;
-//     } 
-//     else if ((rotVal == 1) || (rotVal == 3)) 
-//     {
-//         screenSize[0] = TFT_HEIGHT;
-//         screenSize[1] = TFT_WIDTH;
-//     }
-//     sprintf(outStr, "Rotation\t%d", rotVal);
-//     Serial.println(outStr);
-//     sprintf(outStr, "Screen size\tW %d\tH %d", screenSize[0], screenSize[1]);
-//     Serial.println(outStr);
-// }
-//
-// draw the Yamura banner at bottom of screen
-//
-// void YamuraBanner() 
-// {
-//     Serial.println("YamuraBanner() - drawing banner on TFT display");
-//     tftDisplay.setTextColor((uint16_t)~TFT_BLACK, (uint16_t)~TFT_YELLOW);
-//     SetFont(9);
-//     int xPos = tftDisplay.width() / 2;
-//     int yPos = tftDisplay.height() - fontHeight / 2;
-//     tftDisplay.setTextDatum(BC_DATUM);
-//     tftDisplay.drawString("Yamura Motors LLC Data Logger", xPos, yPos, GFXFF);  // Print the font name onto the TFT screen
-//     tftDisplay.setTextDatum(TL_DATUM);
-//     tftDisplay.setFreeFont(FSS12);
-//     fontHeight = tftDisplay.fontHeight(GFXFF);
-//     tftDisplay.setTextColor(TFT_BLACK, TFT_WHITE);
-// }
-//
-// set font for TFT display, update fontHeight used for vertical stepdown by line
-//
-// void SetFont(int fontSize)
-// {
-//   switch (fontSize) 
-//   {
-//     case 9:
-//       tftDisplay.setFreeFont(FSS9);
-//       break;
-//     case 12:
-//       tftDisplay.setFreeFont(FSS12);
-//       break;
-//     case 18:
-//       tftDisplay.setFreeFont(FSS18);
-//       break;
-//     case 24:
-//       tftDisplay.setFreeFont(FSS24);  // was FSS18
-//       break;
-//     default:
-//       tftDisplay.setFreeFont(FSS12);
-//       break;
-//   }
-//   tftDisplay.setTextDatum(TL_DATUM);
-//   fontHeight = tftDisplay.fontHeight(GFXFF);
-//   fontWidth = tftDisplay.textWidth("X");
-// }
 //
 //
 //
 void MainMenu()
 {
-    #ifdef DEBUG_VERBOSE
+    #ifdef DEBUG_EXTRA_VERBOSE
     Serial.println("MainMenu() - displaying main menu");
     #endif
     int menuCount = 5;
@@ -748,11 +624,24 @@ void GetFileMenu()
 //
 void ChangeSettingsMenu()
 {
-    #ifdef DEBUG_VERBOSE
-    Serial.println("ChangeSettingsMenu() - displaying change settings menu");
+    #ifdef DEBUG_EXTRA_VERBOSE
+    Serial.println("ChangeSettingsMenu() - displaying settings menu");
     #endif
-    tftMenu.NotImplementedScreen("Change settings not implemented");
-    deviceState = DISPLAY_MENU;
+    int menuCount = 4;
+    TFTMenu::MenuChoice settingsMenuChoices[4];
+    settingsMenuChoices[0].description = "Delete log files";
+    settingsMenuChoices[0].result = DELETE_LOG_FILES;
+    settingsMenuChoices[1].description = "Delete all files";
+    settingsMenuChoices[1].result = DELETE_ALL_FILES;
+    settingsMenuChoices[2].description = "List files";
+    settingsMenuChoices[2].result = LIST_FILES;
+    settingsMenuChoices[3].description = "Exit";
+    settingsMenuChoices[3].result = DISPLAY_MENU;
+    deviceState = tftMenu.MenuSelect(12, settingsMenuChoices, menuCount, DELETE_LOG_FILES);
+    #ifdef DEBUG_EXTRA_VERBOSE
+    Serial.print("ChangeSettingsMenu() - selected menu item: ");
+    Serial.println(deviceState); 
+    #endif
 }
 //
 // send a timestamp heartbeat
@@ -766,7 +655,7 @@ void SendHeartbeat()
   msg.id = CANID;
   msg.seq = 1;
   timeStampData.timestamp = millis();
-  #ifdef DEBUG_VERBOSE
+  #ifdef DEBUG_EXTRA_VERBOSE
   Serial.printf("%d\tHeartbeat\n", timeStampData.timestamp);
   #endif
   msg.buf[0] = 1;
@@ -1133,7 +1022,7 @@ void StopLogging()
 //
 void SelectLocalFile(char *selectedFile) 
 {
-    File root = SD.open("/");
+    root = SD.open("/");
     int fileCount = CountFiles(root);
     #ifdef DEBUG_VERBOSE
     Serial.print("files in / ");
@@ -1141,14 +1030,16 @@ void SelectLocalFile(char *selectedFile)
     Serial.println("Create menu...");
     #endif
     TFTMenu::MenuChoice *filesMenu = (TFTMenu::MenuChoice*)calloc(fileCount, sizeof(TFTMenu::MenuChoice));
-    #ifdef DEBUG_VERBOSE
+    #ifdef DEBUG_EXTRA_VERBOSE
     Serial.println("Load names to menu...");
     #endif
     root = SD.open("/");
     LoadLocalFileMenu(root, filesMenu);
+    #ifdef DEBUG_EXTRA_VERBOSE
     Serial.println("Run menu...");
+    #endif
     int selectedFileIdx = tftMenu.MenuSelect(12, filesMenu, fileCount, 0);
-    #ifdef DEBUG_VERBOSE
+    #ifdef DEBUG_EXTRA_VERBOSE
     Serial.print("Returned index:\t");
     Serial.println(selectedFileIdx);
     Serial.print("Returned selection:\t");
@@ -1188,6 +1079,98 @@ int CountFiles(File dir)
     entry.close();
   }
   return fileCount;
+}
+//
+//
+//
+void ListFiles(File dir) 
+{
+  Serial.println("===== list files ======");
+  while (true) 
+  {
+    File entry = dir.openNextFile();
+    if (!entry) 
+    {
+      break;
+    }
+    if (entry.isDirectory()) 
+    {
+      Serial.print("DIR : ");
+      Serial.println(entry.name());
+
+      continue;
+    } 
+    else 
+    {
+      Serial.print("FILE: "); 
+      Serial.println(entry.name());
+    }
+    entry.close();
+  }
+  Serial.println("=======================");
+}
+//
+//
+//
+void DeleteLogFiles(File dir)
+{
+  while (true) 
+  {
+    File entry = dir.openNextFile();
+    if (!entry) 
+    {
+      break;
+    }
+    String fileName = entry.name();
+    if (entry.isDirectory()) 
+    {
+      Serial.print("DIR (skip) : ");
+      Serial.println(entry.name());
+      continue;
+    } 
+    else if((fileName.endsWith(".yl5")) ||
+            (fileName.endsWith(".ylg")))
+    {
+      Serial.print("DELETE FILE: "); 
+      Serial.println(fileName);
+      SD.remove(entry.name());
+    }
+    entry.close();
+  }
+  Serial.println("===== remaining files =====");
+  dir.rewindDirectory();
+  ListFiles(dir);
+}
+//
+//
+//
+void DeleteAllFiles(File dir)
+{
+  while (true) 
+  {
+    File entry = dir.openNextFile();
+    if (!entry) 
+    {
+      break;
+    }
+    String fileName = entry.name();
+    if (entry.isDirectory()) 
+    {
+      Serial.print("DIR (skip) : ");
+      Serial.println(entry.name());
+      continue;
+    } 
+    else
+    {
+      Serial.print("DELETE FILE: "); 
+      Serial.println(fileName);
+      SD.remove(entry.name());
+    }
+    entry.close();
+  }
+  Serial.println("===== remaining files =====");
+  dir.rewindDirectory();
+  ListFiles(dir);
 }
 //
 //
