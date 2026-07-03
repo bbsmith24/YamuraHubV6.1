@@ -9,6 +9,10 @@
 #include "TFTMenu.h"    // Menuing system for TFT display and buttons
 #include <FlexCAN_T4.h>  // CAN-FD https://github.com/tonton81/FlexCAN_T4
 
+// debug to serial levels
+//#define DEBUG_VERBOSE
+//#define DEBUG_EXTRA_VERBOSE
+
 // WiFi SPI pin configuration for Teensy 4.1 with WiFiNINA shield
 #define WIFI_SPI_MOSI_PIN  11  // SPI MOSI used by WiFi module
 #define WIFI_SPI_MISO_PIN  12  // SPI MISO used by WiFi module
