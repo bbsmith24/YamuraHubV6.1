@@ -82,7 +82,7 @@ public:
      * @param localFilePath Local SD card file path
      * @return true if successful, false otherwise
      */
-    bool UploadFileFromSDtoFTPServer(const char* remoteFile, const char* localFilePath);
+    bool UploadFileFromSDtoFTPServer(const char* remoteFile, const char* localFilePath, char* returnMessage);
 
 private:
     WiFiClient ftpClient;

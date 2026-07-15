@@ -391,7 +391,7 @@ void setup()
     tftMenu.DrawString(outStr, tftMenu.textPosition[0], tftMenu.textPosition[1], GFXFF);
     canFD.mailboxStatus();
 
-    sprintf(sdLogFileName, "-");
+    sprintf(sendLogFileName, "-");
 }
 ///
 ///
@@ -416,7 +416,7 @@ void loop()
       deviceState = DISPLAY_MENU;
       break;
     case SEND_LAST_FILE:
-      SendFile(sdLogFileName);
+      SendFile(sendLogFileName);
       deviceState = DISPLAY_MENU;
       break;
     case SEND_FILE:
@@ -460,7 +460,7 @@ void MainMenu()
     #ifdef DEBUG_EXTRA_VERBOSE
     Serial.println("MainMenu() - displaying main menu");
     #endif
-    sprintf(outStr, "Send Last File (%s)", sdLogFileName);
+    sprintf(outStr, "Send Last File (%s)", sendLogFileName);
     int menuCount = 6;
     TFTMenu::MenuChoice mainMenuChoices[6];
     mainMenuChoices[0].description = "Start Logging";
@@ -503,9 +503,9 @@ void StartLogging()
     #endif
     timer.end();  // stop heartbeat before logging starts
     int fileIdx = GetNextLogFileIdx();
-    sprintf(sdLogFileName, "/sdLog%03d.yl5", fileIdx);
+    sprintf(sendLogFileName, "/sdLog%03d.yl5", fileIdx);
     #ifdef DEBUG_VERBOSE
-    Serial.printf("Opening log file %s for writing\n", sdLogFileName);
+    Serial.printf("Opening log file %s for writing\n", sendLogFileName);
     #endif
 
     tftDisplay.fillScreen((uint16_t)~TFT_GREEN);
@@ -520,25 +520,24 @@ void StartLogging()
     sprintf(outStr, "START LOGGING at %lu", millis());
     tftDisplay.drawString(outStr, textPosition[0], textPosition[1], GFXFF);
     textPosition[1] += fontHeight;
-    sprintf(outStr, "%s", sdLogFileName);
+    sprintf(outStr, "%s", sendLogFileName);
     tftDisplay.drawString(outStr, textPosition[0], textPosition[1], GFXFF);
     textPosition[1] += fontHeight;
     //
-    //targetFile = SD.open(sdLogFileName, O_WRITE | O_CREAT);
-    targetFile = SD.open(sdLogFileName, FILE_WRITE);
+    targetFile = SD.open(sendLogFileName, FILE_WRITE);
     if (!targetFile || targetFile.isDirectory())
     {
         #ifdef DEBUG_VERBOSE
-        Serial.printf("Failed to open file %s for writing\n", sdLogFileName);
+        Serial.printf("Failed to open file %s for writing\n", sendLogFileName);
         #endif
-        sprintf(outStr, "Logging Failed %s", sdLogFileName);
+        sprintf(outStr, "Logging Failed %s", sendLogFileName);
         tftDisplay.drawString(outStr, textPosition[0], textPosition[1], GFXFF);
         textPosition[1] += fontHeight;
         logData = false;
         return;
     }
     #ifdef DEBUG_VERBOSE
-    Serial.printf("Start logging to %s at %dms\n", sdLogFileName, millis());
+    Serial.printf("Start logging to %s at %dms\n", sendLogFileName, millis());
     #endif
     logData = true;
     while (true)
@@ -576,16 +575,12 @@ void SendFileMenu()
 void SendFile(char* fileNameToSend)
 {
     char fileNameToSendSize[64];
-
-    String fileNameStrToSend = fileNameToSend;
+    String fileNameStrToSend = sendLogFileName;
     int spaceIdx = fileNameStrToSend.indexOf(".");
-    if(spaceIdx == -1)
+    if(!strcmp(fileNameToSend, "-"))
     {
       sprintf(outStr, "No recent file - record first");
       tftMenu.NotImplementedScreen(outStr);
-      #ifdef DEBUG_VERBOSE
-      Serial.println("SendFile() - Invalid file name, no extension found");
-      #endif
       deviceState = DISPLAY_MENU;
       return;
     }
@@ -597,9 +592,12 @@ void SendFile(char* fileNameToSend)
     timer.end();  
 
     // clean up the file name - split on space between name and size
-    spaceIdx = fileNameStrToSend.indexOf(" ", spaceIdx);
-    strcpy(fileNameToSend, fileNameStrToSend.substring(0, spaceIdx).c_str());
-    strcpy(fileNameToSendSize, fileNameStrToSend.substring(spaceIdx).c_str());
+    if(spaceIdx > -1)
+    {
+      spaceIdx = fileNameStrToSend.indexOf(" ", spaceIdx);
+      strcpy(fileNameToSend, fileNameStrToSend.substring(0, spaceIdx).c_str());
+      strcpy(fileNameToSendSize, fileNameStrToSend.substring(spaceIdx).c_str());
+    }
     #ifdef DEBUG_VERBOSE
     sprintf(outStr, "%s >>>> %s", fileNameToSend, fileNameToSendSize);
     Serial.println(outStr);
@@ -612,16 +610,23 @@ void SendFile(char* fileNameToSend)
     textPosition[0] = 0;
     textPosition[1] = tftMenu.fontHeight;
     sprintf(outStr, "Sending %s...", fileNameToSend);
+    sprintf(sendLogFileName, "%s", fileNameToSend );
     tftDisplay.drawString(outStr, textPosition[0], textPosition[1], GFXFF);
     textPosition[1] += tftMenu.fontHeight;
     // send the file to the FTP server
-    bool sendResult = ftpClient.UploadFileFromSDtoFTPServer(fileNameToSend, fileNameToSend);
+    char statusStr[256];
+    bool sendResult = ftpClient.UploadFileFromSDtoFTPServer(fileNameToSend, fileNameToSend, statusStr);
     // display result on TFT
     sprintf(outStr, "Sent %s", fileNameToSend);
     tftDisplay.drawString(outStr, textPosition[0], textPosition[1], GFXFF);
+
     textPosition[1] += tftMenu.fontHeight;
     sprintf(outStr, "Result %s", sendResult ? "OK" : "ERROR");
+
+    textPosition[1] += tftMenu.fontHeight;
+    sprintf(outStr, " %s",statusStr);
     tftDisplay.drawString(outStr, textPosition[0], textPosition[1], GFXFF);
+
     textPosition[1] += tftMenu.fontHeight;
     tftDisplay.drawString("Press any button to continue", textPosition[0], textPosition[1], GFXFF);
     textPosition[1] += tftMenu.fontHeight;
@@ -1015,7 +1020,7 @@ void StopLogging()
     tftMenu.DrawString(outStr, tftMenu.textPosition[0], tftMenu.textPosition[1], GFXFF);
     logData = false;
     #ifdef DEBUG_VERBOSE
-    Serial.printf("End logging  at %dms to file %s (%0.3f KB)\n", millis(), sdLogFileName, (float)targetFile.size() / 1000.0);
+    Serial.printf("End logging  at %dms to file %s (%0.3f KB)\n", millis(), sendLogFileName, (float)targetFile.size() / 1000.0);
     #endif
     tftDisplay.fillScreen((uint16_t)~TFT_RED);
     tftDisplay.setRotation(1);
@@ -1029,7 +1034,7 @@ void StopLogging()
     sprintf(outStr, "STOP LOGGING at %lu", millis());
     tftDisplay.drawString(outStr, textPosition[0], textPosition[1], GFXFF);
     textPosition[1] += fontHeight;
-    sprintf(outStr, "%s (%0.3f KB)", sdLogFileName, (float)targetFile.size() / 1000.0);
+    sprintf(outStr, "%s (%0.3f KB)", sendLogFileName, (float)targetFile.size() / 1000.0);
     tftDisplay.drawString(outStr, textPosition[0], textPosition[1], GFXFF);
     textPosition[1] += fontHeight;
     //
@@ -1073,7 +1078,8 @@ void SelectLocalFile(char *selectedFile)
     #endif  
     int spaceIdx = filesMenu[selectedFileIdx].description.indexOf(".");
     spaceIdx = filesMenu[selectedFileIdx].description.indexOf(" ", spaceIdx);
-    strcpy(selectedFile, filesMenu[selectedFileIdx].description.substring(0, spaceIdx).c_str());
+    strcpy(sendLogFileName, filesMenu[selectedFileIdx].description.substring(0, spaceIdx).c_str());
+    strcpy(selectedFile, sendLogFileName);
     free(filesMenu);
     #ifdef DEBUG_VERBOSE
     Serial.print("File name to send:\t>>>>>");

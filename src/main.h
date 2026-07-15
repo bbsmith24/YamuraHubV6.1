@@ -51,7 +51,7 @@
 // current state of logger
 int deviceState = 0;
 bool logData = false;
-char sdLogFileName[20];
+char sendLogFileName[20];
 bool gpsStatus = false;
 int gpsSIV = 0;
 char outStr[512];

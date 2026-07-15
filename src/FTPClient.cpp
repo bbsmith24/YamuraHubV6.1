@@ -525,23 +525,34 @@ bool FTPClient::UploadFileToFTPServer(const char* remoteFile, const uint8_t* dat
     return true;
 }
 
-bool FTPClient::UploadFileFromSDtoFTPServer(const char* remoteFile, const char* localFilePath) 
+bool FTPClient::UploadFileFromSDtoFTPServer(const char* remoteFile, const char* localFilePath, char* returnMessage) 
 {
     Serial.print("DEBUG: uploadFileFromStorage() local ");
     Serial.print(localFilePath);
     Serial.print(" remote ");    
     Serial.println(remoteFile);
 
-    if (!FTPConnect(FTP_SERVER, 21, FTP_USER, FTP_PASS)) {
+    if (!FTPConnect(FTP_SERVER, 21, FTP_USER, FTP_PASS)) 
+    {
         Serial.println("ERROR: FTP connection failed!");
+        int waitCount = 0;
         while (true) 
         {
             delay(1000);
+            waitCount++;
+            if (waitCount >= 20) 
+            {
+                Serial.println("Waiting for FTP connection...");
+                sprintf(returnMessage, "ERROR: FTP connection failed after %d seconds", waitCount);
+                return false;
+            }
         }
     }
 
-    if (!remoteFile || !localFilePath) {
+    if (!remoteFile || !localFilePath) 
+    {
         Serial.println("ERROR: NULL parameter passed to uploadFileFromStorage()");
+        sprintf(returnMessage, "ERROR: NULL parameter passed to uploadFileFromStorage()");
         return false;
     }
 
@@ -574,6 +585,7 @@ bool FTPClient::UploadFileFromSDtoFTPServer(const char* remoteFile, const char* 
     if (fileSize == 0) 
     {
         Serial.println("ERROR: Cannot upload empty file");
+        sprintf(returnMessage, "ERROR: Cannot upload empty file");
         localFile.close();
         return false;
     }
@@ -599,6 +611,7 @@ bool FTPClient::UploadFileFromSDtoFTPServer(const char* remoteFile, const char* 
     if (!IsFTPResponseCode(status, "150")) 
     {
         Serial.println("ERROR: STOR command failed");
+        sprintf(returnMessage, "ERROR: STOR command failed");
         dataClient.stop();
         localFile.close();
         return false;
@@ -614,6 +627,7 @@ bool FTPClient::UploadFileFromSDtoFTPServer(const char* remoteFile, const char* 
         if (!WriteAllToFTPClient(dataClient, buffer, bytesRead)) 
         {
             Serial.println("ERROR: Failed to write to FTP server");
+            sprintf(returnMessage, "ERROR: Failed to write to FTP server");
             localFile.close();
             dataClient.stop();
             return false;
@@ -643,13 +657,16 @@ bool FTPClient::UploadFileFromSDtoFTPServer(const char* remoteFile, const char* 
     Serial.println("Upload complete, waiting for server confirmation...");
 
     String finish = ReadFTPResponse();
-    if (!IsFTPResponseCode(finish, "226")) {
+    if (!IsFTPResponseCode(finish, "226")) 
+    {
         Serial.print("ERROR: ");
         Serial.print(finish);
         Serial.println(" - upload did not complete successfully");
+        sprintf(returnMessage, "ERROR: upload did not complete successfully");
     }
     FTPDisconnect();   
     Serial.println("Upload successful!");
+    sprintf(returnMessage, "Upload successful");
     return true;
 }
 
