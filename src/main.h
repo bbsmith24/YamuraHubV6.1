@@ -47,6 +47,7 @@
 #define DELETE_ALL_FILES 7
 #define LIST_FILES 8
 #define SEND_LAST_FILE 9
+#define SELECT_FTP_PORT 10
 
 // current state of logger
 int deviceState = 0;
@@ -236,3 +237,4 @@ void ListFiles(File dir);
 void DeleteAllFiles(File dir);
 void DeleteLogFiles(File dir);
 void SendFile(char* fileNameToSend);
+void SelectFtpPort();

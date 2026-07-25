@@ -15,6 +15,7 @@
 class FTPClient {
 public:
     static constexpr uint16_t DEFAULT_FTP_PORT = 21;
+    int ftpListenerPort = 21;
     //static constexpr uint16_t FTP_CHUNK_SIZE = 512;
     static constexpr uint16_t FTP_CHUNK_SIZE = 256;
     static constexpr unsigned long RESPONSE_TIMEOUT = 8000;

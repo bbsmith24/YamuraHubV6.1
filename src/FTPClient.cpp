@@ -165,13 +165,12 @@ bool FTPClient::FTPConnect(const char* host, uint16_t port, const char* user, co
     Serial.print("'... ");
 
     int status = WiFi.begin(SSID, PASSWORD);
-    if (status != WL_CONNECTED) {
+    if (status != WL_CONNECTED) 
+    {
         Serial.println("FAILED");
         Serial.print("ERROR: WiFi connection failed, status = ");
         Serial.println(status);
-        while (true) {
-            delay(1000);
-        }
+        return false;
     }
 
     Serial.println("OK");
@@ -530,9 +529,13 @@ bool FTPClient::UploadFileFromSDtoFTPServer(const char* remoteFile, const char* 
     Serial.print("DEBUG: uploadFileFromStorage() local ");
     Serial.print(localFilePath);
     Serial.print(" remote ");    
-    Serial.println(remoteFile);
+    Serial.print(remoteFile);
+    Serial.print(" FTP_SERVER ");    
+    Serial.print(FTP_SERVER);
+    Serial.print(" PORT ");    
+    Serial.println(ftpListenerPort);
 
-    if (!FTPConnect(FTP_SERVER, 21, FTP_USER, FTP_PASS)) 
+    if (!FTPConnect(FTP_SERVER, ftpListenerPort/*21*/, FTP_USER, FTP_PASS)) 
     {
         Serial.println("ERROR: FTP connection failed!");
         int waitCount = 0;

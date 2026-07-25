@@ -448,6 +448,11 @@ void loop()
       ListFiles(root);
       deviceState = DISPLAY_MENU;
       break;
+    case SELECT_FTP_PORT:
+      Serial.println("SelectFtpPort() - selecting FTP port");  
+      SelectFtpPort();
+      deviceState = DISPLAY_MENU;
+      break;
     default:
       break;
   }
@@ -598,40 +603,48 @@ void SendFile(char* fileNameToSend)
       strcpy(fileNameToSend, fileNameStrToSend.substring(0, spaceIdx).c_str());
       strcpy(fileNameToSendSize, fileNameStrToSend.substring(spaceIdx).c_str());
     }
-    #ifdef DEBUG_VERBOSE
-    sprintf(outStr, "%s >>>> %s", fileNameToSend, fileNameToSendSize);
-    Serial.println(outStr);
-    #endif
-    // display sending file message on TFT
-    tftDisplay.fillScreen(TFT_WHITE);
-    tftMenu.DisplayBanner();
-    tftMenu.SetFont(12);
-    int textPosition[2];
-    textPosition[0] = 0;
-    textPosition[1] = tftMenu.fontHeight;
-    sprintf(outStr, "Sending %s...", fileNameToSend);
-    sprintf(sendLogFileName, "%s", fileNameToSend );
-    tftDisplay.drawString(outStr, textPosition[0], textPosition[1], GFXFF);
-    textPosition[1] += tftMenu.fontHeight;
-    // send the file to the FTP server
-    char statusStr[256];
-    bool sendResult = ftpClient.UploadFileFromSDtoFTPServer(fileNameToSend, fileNameToSend, statusStr);
-    // display result on TFT
-    sprintf(outStr, "Sent %s", fileNameToSend);
-    tftDisplay.drawString(outStr, textPosition[0], textPosition[1], GFXFF);
+    bool sendResult = false;
+    int attemptCount = 0;
+    while(!sendResult)
+    {
+      #ifdef DEBUG_VERBOSE
+      sprintf(outStr, "%s >>>> %s", fileNameToSend, fileNameToSendSize);
+      Serial.println(outStr);
+      #endif
+      // display sending file message on TFT
+      tftDisplay.fillScreen(TFT_WHITE);
+      tftMenu.DisplayBanner();
+      tftMenu.SetFont(12);
+      int textPosition[2];
+      textPosition[0] = 0;
+      textPosition[1] = tftMenu.fontHeight;
+      sprintf(outStr, "Sending %s...(%d)", fileNameToSend, attemptCount + 1);
+      sprintf(sendLogFileName, "%s", fileNameToSend );
+      tftDisplay.drawString(outStr, textPosition[0], textPosition[1], GFXFF);
+      textPosition[1] += tftMenu.fontHeight;
+      // send the file to the FTP server
+      char statusStr[256];
+      sendResult = ftpClient.UploadFileFromSDtoFTPServer(fileNameToSend, fileNameToSend, statusStr);
+      // display result on TFT
+      sprintf(outStr, "Sent %s", fileNameToSend);
+      tftDisplay.drawString(outStr, textPosition[0], textPosition[1], GFXFF);
 
-    textPosition[1] += tftMenu.fontHeight;
-    sprintf(outStr, "Result %s", sendResult ? "OK" : "ERROR");
+      textPosition[1] += tftMenu.fontHeight;
+      sprintf(outStr, "Result %s", sendResult ? "OK" : "ERROR");
 
-    textPosition[1] += tftMenu.fontHeight;
-    sprintf(outStr, " %s",statusStr);
-    tftDisplay.drawString(outStr, textPosition[0], textPosition[1], GFXFF);
+      textPosition[1] += tftMenu.fontHeight;
+      sprintf(outStr, " %s",statusStr);
+      tftDisplay.drawString(outStr, textPosition[0], textPosition[1], GFXFF);
 
-    textPosition[1] += tftMenu.fontHeight;
-    tftDisplay.drawString("Press any button to continue", textPosition[0], textPosition[1], GFXFF);
-    textPosition[1] += tftMenu.fontHeight;
-
-    tftMenu.WaitForAnyButton();
+      if(attemptCount > 5)
+      {
+        textPosition[1] += tftMenu.fontHeight;
+        tftDisplay.drawString("Press any button to continue", textPosition[0], textPosition[1], GFXFF);
+        textPosition[1] += tftMenu.fontHeight;
+        tftMenu.WaitForAnyButton();
+      }
+      attemptCount++;
+    }
     deviceState = DISPLAY_MENU;
 
     #ifdef DEBUG_VERBOSE
@@ -658,16 +671,18 @@ void ChangeSettingsMenu()
     #ifdef DEBUG_EXTRA_VERBOSE
     Serial.println("ChangeSettingsMenu() - displaying settings menu");
     #endif
-    int menuCount = 4;
-    TFTMenu::MenuChoice settingsMenuChoices[4];
+    int menuCount = 5;
+    TFTMenu::MenuChoice settingsMenuChoices[5];
     settingsMenuChoices[0].description = "Delete log files";
     settingsMenuChoices[0].result = DELETE_LOG_FILES;
     settingsMenuChoices[1].description = "Delete all files";
     settingsMenuChoices[1].result = DELETE_ALL_FILES;
     settingsMenuChoices[2].description = "List files";
     settingsMenuChoices[2].result = LIST_FILES;
-    settingsMenuChoices[3].description = "Exit";
-    settingsMenuChoices[3].result = DISPLAY_MENU;
+    settingsMenuChoices[3].description = "FTP Port";
+    settingsMenuChoices[3].result = SELECT_FTP_PORT;
+    settingsMenuChoices[4].description = "Exit";
+    settingsMenuChoices[4].result = DISPLAY_MENU;
     deviceState = tftMenu.MenuSelect(12, settingsMenuChoices, menuCount, DELETE_LOG_FILES);
     #ifdef DEBUG_EXTRA_VERBOSE
     Serial.print("ChangeSettingsMenu() - selected menu item: ");
@@ -1238,4 +1253,19 @@ void LoadLocalFileMenu(File dir, TFTMenu::MenuChoice *filesMenu)
     }
     entry.close();
   }
+}
+//
+// select FTP port
+//
+void SelectFtpPort()
+{
+    TFTMenu::MenuChoice ftpPortMenuChoices[3];
+    ftpPortMenuChoices[0].description = "Port 21";
+    ftpPortMenuChoices[0].result = 21;  
+    ftpPortMenuChoices[1].description = "Port 2121";
+    ftpPortMenuChoices[1].result = 2121;
+    ftpPortMenuChoices[2].description = "Port 2021";
+    ftpPortMenuChoices[2].result = 2021;
+    int selectedPort = tftMenu.MenuSelect(12, ftpPortMenuChoices, 3, 0);
+    ftpClient.ftpListenerPort = selectedPort; 
 }
