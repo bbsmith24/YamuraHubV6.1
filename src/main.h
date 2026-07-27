@@ -36,6 +36,10 @@
 #define BUTTON_1 17
 #define BUTTON_2 18
 
+// indicator LED pin definition
+#define RECORDING_LED 21
+#define GPS_STATUS_LED 22
+
 // main menu
 #define DISPLAY_MENU 0
 #define SELECT_DRIVER 1

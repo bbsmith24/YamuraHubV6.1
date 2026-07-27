@@ -172,7 +172,35 @@ void setup()
     Serial.print("CS pin: ");
     Serial.println(SD_CS);
     Serial.println();
+
+    Serial.println();
+    Serial.println("LED indicator pins");
+    Serial.println("=======");
+    Serial.print("RECORDING LED pin: ");
+    Serial.println(RECORDING_LED);
+    Serial.print("GPS STATUS LED pin: ");
+    Serial.println(GPS_STATUS_LED);
+    Serial.println();
     #endif
+    // Initialize indicator LEDs
+    pinMode(RECORDING_LED, OUTPUT); 
+    pinMode(GPS_STATUS_LED, OUTPUT);
+
+    #ifdef DEBUG_VERBOSE
+    Serial.println("Blinking indicator LEDs to show system is starting up...");
+    for(int idx = 0; idx < 10; idx++)
+    {
+        digitalWrite(RECORDING_LED, LOW);
+        digitalWrite(GPS_STATUS_LED, HIGH);
+        delay(100);
+        digitalWrite(RECORDING_LED, HIGH);
+        digitalWrite(GPS_STATUS_LED, LOW);
+        delay(100);
+    }
+    #endif
+    digitalWrite(RECORDING_LED, LOW);
+    digitalWrite(GPS_STATUS_LED, LOW);
+
     // Initialize SPI for WiFi module
     #ifdef DEBUG_VERBOSE
     Serial.println("Initializing SPI for WiFi module...");
@@ -512,6 +540,8 @@ void StartLogging()
     #ifdef DEBUG_VERBOSE
     Serial.printf("Opening log file %s for writing\n", sendLogFileName);
     #endif
+
+    digitalWrite(RECORDING_LED, HIGH);  // turn on recording LED
 
     tftDisplay.fillScreen((uint16_t)~TFT_GREEN);
     tftDisplay.setRotation(1);
@@ -964,6 +994,18 @@ void CAN_CANMessage(const CANFD_message_t &msg)
 //
 void ShowGPSStatus(bool gpsActive, int gpsSIV) 
 {
+  #ifdef DEBUG_VERBOSE
+   Serial.printf("ShowGPSStatus() SIV %02d\n", gpsSIV);
+  #endif
+
+  if(gpsSIV <= 0)
+  {
+    digitalWrite(GPS_STATUS_LED, LOW);
+  }
+  else
+  {
+    digitalWrite(GPS_STATUS_LED, HIGH); 
+  }
     // char messageStr[32];
     //#ifdef DEBUG_VERBOSE
     // Serial.println("ShowGPSStatus() - displaying GPS status on TFT display");
@@ -1031,6 +1073,7 @@ void StopLogging()
     // flush and close file
     targetFile.flush();
     targetFile.close();
+    digitalWrite(RECORDING_LED, LOW);  // turn off recording LED
     sprintf(outStr, "Logging stopped");
     tftMenu.DrawString(outStr, tftMenu.textPosition[0], tftMenu.textPosition[1], GFXFF);
     logData = false;
@@ -1055,9 +1098,10 @@ void StopLogging()
     //
     targetFile.close();
 
-    tftDisplay.drawString("Press any button to continue", textPosition[0], textPosition[1], GFXFF);
-    textPosition[1] += fontHeight;
-    tftMenu.WaitForAnyButton();
+    delay(10000);  // wait 10 seconds before returning to menu
+    //tftDisplay.drawString("Press any button to continue", textPosition[0], textPosition[1], GFXFF);
+    //textPosition[1] += fontHeight;
+    //tftMenu.WaitForAnyButton();
     deviceState = DISPLAY_MENU;
 }
 //
