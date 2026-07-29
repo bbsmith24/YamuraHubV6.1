@@ -672,6 +672,7 @@ void SendFile(char* fileNameToSend)
         tftDisplay.drawString("Press any button to continue", textPosition[0], textPosition[1], GFXFF);
         textPosition[1] += tftMenu.fontHeight;
         tftMenu.WaitForAnyButton();
+        break;
       }
       attemptCount++;
     }
