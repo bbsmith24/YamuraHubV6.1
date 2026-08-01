@@ -102,6 +102,32 @@ public:
      */
     bool UploadFileFromSDtoFTPServer(const char* remoteFile, const char* localFilePath, char* returnMessage);
 
+    /**
+     * @brief Connect, fetch the server's file list (NLST) for a path, disconnect.
+     *
+     * Self-contained (mirrors UploadFileFromSDtoFTPServer): it opens its own
+     * WiFi/FTP connection and closes it before returning, so the caller can show
+     * a menu without holding the connection open.
+     * @param path Remote directory to list (e.g. "/")
+     * @param outNames Caller-provided array to fill with bare filenames
+     * @param maxNames Capacity of outNames
+     * @param returnMessage Status/error text (buffer >= 64 bytes)
+     * @return number of names filled (>= 0), or -1 on error
+     */
+    int GetFTPServerFileList(const char* path, String* outNames, int maxNames, char* returnMessage);
+
+    /**
+     * @brief Connect, download a file from the server to SD, disconnect.
+     *
+     * Self-contained counterpart to UploadFileFromSDtoFTPServer. Overwrites any
+     * existing local file so it does not append.
+     * @param remoteFile Remote filename to fetch
+     * @param localFilePath Destination path on the SD card (e.g. "/name.yl5")
+     * @param returnMessage Status/error text (buffer >= 64 bytes)
+     * @return true on success, false otherwise
+     */
+    bool GetFileFromFTPServer(const char* remoteFile, const char* localFilePath, char* returnMessage);
+
 private:
     WiFiClient ftpClient;
     WiFiClient dataClient;

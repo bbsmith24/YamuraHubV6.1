@@ -703,10 +703,112 @@ void SendFile(char* fileNameToSend)
 void GetFileMenu()
 {
     #ifdef DEBUG_VERBOSE
-    Serial.println("GetFileMenu() - displaying get file menu");
+    Serial.println("GetFileMenu() - request file list from FTP server");
     #endif
-    tftMenu.NotImplementedScreen("Get file not implemented");
+
+    // stop heartbeat during FTP activity (mirrors SendFile)
+    timer.end();
+
+    const int MAX_REMOTE_FILES = 64;
+    String remoteNames[MAX_REMOTE_FILES];
+    char statusStr[256];
+
+    // let the user know we are reaching out to the server (this re-associates
+    // WiFi and can take a few seconds)
+    tftDisplay.fillScreen(TFT_WHITE);
+    tftMenu.DisplayBanner();
+    tftMenu.SetFont(12);
+    tftDisplay.drawString("Getting file list...", 0, tftMenu.fontHeight, GFXFF);
+
+    int fileCount = ftpClient.GetFTPServerFileList("/", remoteNames, MAX_REMOTE_FILES, statusStr);
+    if (fileCount <= 0)
+    {
+        // statusStr holds "No files on server" or the error text
+        tftMenu.NotImplementedScreen(statusStr);
+        deviceState = DISPLAY_MENU;
+        timer.begin(SendHeartbeat, TIMER_1HZ);
+        return;
+    }
+
+    // build a selectable menu from the server file list (same pattern as
+    // SelectLocalFile)
+    TFTMenu::MenuChoice *filesMenu = (TFTMenu::MenuChoice*)calloc(fileCount, sizeof(TFTMenu::MenuChoice));
+    if (!filesMenu)
+    {
+        tftMenu.NotImplementedScreen("Out of memory building list");
+        deviceState = DISPLAY_MENU;
+        timer.begin(SendHeartbeat, TIMER_1HZ);
+        return;
+    }
+    for (int i = 0; i < fileCount; i++)
+    {
+        filesMenu[i].description = remoteNames[i];
+        filesMenu[i].result = i;
+    }
+
+    int selectedIdx = tftMenu.MenuSelect(12, filesMenu, fileCount, 0);
+    char remoteFile[96];
+    strncpy(remoteFile, filesMenu[selectedIdx].description.c_str(), sizeof(remoteFile) - 1);
+    remoteFile[sizeof(remoteFile) - 1] = '\0';
+    free(filesMenu);
+
+    // fetch to the top level of the microSD file system
+    char localPath[128];
+    sprintf(localPath, "/%s", remoteFile);
+
+    bool getResult = false;
+    int attemptCount = 0;
+    while (!getResult)
+    {
+        tftDisplay.fillScreen(TFT_WHITE);
+        tftMenu.DisplayBanner();
+        tftMenu.SetFont(12);
+        int textPosition[2];
+        textPosition[0] = 0;
+        textPosition[1] = tftMenu.fontHeight;
+        sprintf(outStr, "Getting %s...(%d)", remoteFile, attemptCount + 1);
+        tftDisplay.drawString(outStr, textPosition[0], textPosition[1], GFXFF);
+
+        getResult = ftpClient.GetFileFromFTPServer(remoteFile, localPath, statusStr);
+
+        textPosition[1] += tftMenu.fontHeight;
+        sprintf(outStr, "Result %s", getResult ? "OK" : "ERROR");
+        tftDisplay.drawString(outStr, textPosition[0], textPosition[1], GFXFF);
+        textPosition[1] += tftMenu.fontHeight;
+        sprintf(outStr, " %s", statusStr);
+        tftDisplay.drawString(outStr, textPosition[0], textPosition[1], GFXFF);
+
+        if (getResult)
+        {
+            delay(2000);  // hold the success message briefly
+            break;
+        }
+
+        if (attemptCount > 5)
+        {
+            textPosition[1] += tftMenu.fontHeight;
+            tftDisplay.drawString("Press any button to continue", textPosition[0], textPosition[1], GFXFF);
+            tftMenu.WaitForAnyButton();
+            break;
+        }
+
+        // hold the error long enough to read before retrying (also a backoff)
+        #ifdef DEBUG_VERBOSE
+        Serial.print("Get attempt ");
+        Serial.print(attemptCount + 1);
+        Serial.print(" failed: ");
+        Serial.println(statusStr);
+        #endif
+        delay(3000);
+        attemptCount++;
+    }
+
     deviceState = DISPLAY_MENU;
+
+    #ifdef DEBUG_VERBOSE
+    Serial.println("Restart heartbeat timer in GetFileMenu");
+    #endif
+    timer.begin(SendHeartbeat, TIMER_1HZ);  // restart heartbeat after file get
 }
 //
 //

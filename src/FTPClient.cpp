@@ -830,3 +830,248 @@ bool FTPClient::DownloadFileFromFTPServerToSD(const char* remoteFile, const char
     String finish = ReadFTPResponse();
     return IsFTPResponseCode(finish, "226");
 }
+
+int FTPClient::GetFTPServerFileList(const char* path, String* outNames, int maxNames, char* returnMessage)
+{
+    if (!path || !outNames || maxNames <= 0)
+    {
+        Serial.println("ERROR: bad parameters to GetFTPServerFileList()");
+        sprintf(returnMessage, "ERROR: bad list parameters");
+        return -1;
+    }
+
+    if (!FTPConnect(FTP_SERVER, ftpListenerPort, FTP_USER, FTP_PASS))
+    {
+        Serial.println("ERROR: FTP connection failed!");
+        sprintf(returnMessage, "ERROR: FTP/WiFi connection failed (out of range?)");
+        FTPDisconnect();
+        return -1;
+    }
+
+    uint16_t dataPort = 0;
+    if (!EnterFTPPassiveMode(dataPort))
+    {
+        sprintf(returnMessage, "ERROR: PASV command failed");
+        FTPDisconnect();
+        return -1;
+    }
+
+    if (!dataClient.connect(ftpServer, dataPort))
+    {
+        Serial.println("ERROR: Data connection failed");
+        sprintf(returnMessage, "ERROR: Data connection failed");
+        FTPDisconnect();
+        return -1;
+    }
+
+    // NLST returns bare filenames (one per line), which is far easier to parse
+    // into a menu than the ls -l style output of LIST.
+    String listCmd = String("NLST ") + path;
+    ftpClient.println(listCmd);
+    ftpClient.flush();
+    String status = ReadFTPResponse();
+    if (!IsFTPResponseCode(status, "150") && !IsFTPResponseCode(status, "125"))
+    {
+        // Some servers answer an empty directory with 226 and no data.
+        if (IsFTPResponseCode(status, "226"))
+        {
+            dataClient.stop();
+            FTPDisconnect();
+            sprintf(returnMessage, "No files on server");
+            return 0;
+        }
+        Serial.println("ERROR: NLST command failed");
+        sprintf(returnMessage, "ERROR: NLST command failed");
+        dataClient.stop();
+        FTPDisconnect();
+        return -1;
+    }
+
+    int count = 0;
+    String line;
+    unsigned long start = millis();
+    while (dataClient.connected() && millis() - start < RESPONSE_TIMEOUT)
+    {
+        while (dataClient.available())
+        {
+            char c = (char)dataClient.read();
+            start = millis();
+            if (c == '\n')
+            {
+                line.trim();
+                // Strip any directory prefix in case the server returns paths.
+                int slash = line.lastIndexOf('/');
+                if (slash >= 0)
+                {
+                    line = line.substring(slash + 1);
+                }
+                if (line.length() > 0 && count < maxNames)
+                {
+                    outNames[count++] = line;
+                }
+                line = "";
+            }
+            else if (c != '\r')
+            {
+                line += c;
+            }
+        }
+    }
+    // Handle a final line with no trailing newline.
+    line.trim();
+    if (line.length() > 0 && count < maxNames)
+    {
+        int slash = line.lastIndexOf('/');
+        if (slash >= 0)
+        {
+            line = line.substring(slash + 1);
+        }
+        outNames[count++] = line;
+    }
+
+    dataClient.stop();
+    String finish = ReadFTPResponse();
+    FTPDisconnect();
+
+    if (!IsFTPResponseCode(finish, "226"))
+    {
+        Serial.println("ERROR: file list did not complete");
+        sprintf(returnMessage, "ERROR: file list incomplete");
+        return -1;
+    }
+
+    Serial.print("Server file list: ");
+    Serial.print(count);
+    Serial.println(" file(s)");
+    sprintf(returnMessage, "%d file(s) on server", count);
+    return count;
+}
+
+bool FTPClient::GetFileFromFTPServer(const char* remoteFile, const char* localFilePath, char* returnMessage)
+{
+    if (!remoteFile || !localFilePath)
+    {
+        Serial.println("ERROR: NULL parameter passed to GetFileFromFTPServer()");
+        sprintf(returnMessage, "ERROR: NULL parameter");
+        return false;
+    }
+
+    Serial.print("DEBUG: GetFileFromFTPServer() remote ");
+    Serial.print(remoteFile);
+    Serial.print(" -> local ");
+    Serial.println(localFilePath);
+
+    if (!FTPConnect(FTP_SERVER, ftpListenerPort, FTP_USER, FTP_PASS))
+    {
+        Serial.println("ERROR: FTP connection failed!");
+        sprintf(returnMessage, "ERROR: FTP/WiFi connection failed (out of range?)");
+        FTPDisconnect();
+        return false;
+    }
+
+    // Set binary mode
+    SendFTPCommand("TYPE I");
+
+    // SD FILE_WRITE appends - remove any existing copy so we get a clean file.
+    if (SD.exists(localFilePath))
+    {
+        SD.remove(localFilePath);
+    }
+
+    File localFile = SD.open(localFilePath, FILE_WRITE);
+    if (!localFile)
+    {
+        Serial.print("ERROR: Failed to open local file: ");
+        Serial.println(localFilePath);
+        sprintf(returnMessage, "ERROR: cannot open local file");
+        FTPDisconnect();
+        return false;
+    }
+
+    uint16_t dataPort = 0;
+    if (!EnterFTPPassiveMode(dataPort))
+    {
+        sprintf(returnMessage, "ERROR: PASV command failed");
+        localFile.close();
+        FTPDisconnect();
+        return false;
+    }
+
+    if (!dataClient.connect(ftpServer, dataPort))
+    {
+        Serial.println("ERROR: Data connection failed");
+        sprintf(returnMessage, "ERROR: Data connection failed");
+        localFile.close();
+        FTPDisconnect();
+        return false;
+    }
+
+    String retrCmd = String("RETR ") + remoteFile;
+    ftpClient.println(retrCmd);
+    ftpClient.flush();
+    String status = ReadFTPResponse();
+    if (!IsFTPResponseCode(status, "150") && !IsFTPResponseCode(status, "125"))
+    {
+        Serial.println("ERROR: RETR command failed");
+        sprintf(returnMessage, "ERROR: RETR command failed");
+        dataClient.stop();
+        localFile.close();
+        FTPDisconnect();
+        return false;
+    }
+
+    uint8_t buffer[FTP_CHUNK_SIZE];
+    unsigned long totalBytes = 0;
+    unsigned long lastProgress = millis();
+    unsigned long downloadStart = millis();
+    unsigned long start = millis();
+    while (dataClient.connected() && millis() - start < RESPONSE_TIMEOUT)
+    {
+        int n = dataClient.read(buffer, FTP_CHUNK_SIZE);
+        if (n > 0)
+        {
+            localFile.write(buffer, n);
+            totalBytes += n;
+            start = millis();
+
+            if (millis() - lastProgress >= 500)
+            {
+                Serial.print("Download progress: ");
+                Serial.print(totalBytes);
+                Serial.println(" bytes");
+                lastProgress = millis();
+            }
+        }
+        else
+        {
+            delay(1);
+        }
+    }
+
+    localFile.close();
+    dataClient.stop();
+
+    unsigned long downloadMs = millis() - downloadStart;
+    Serial.print("Transfer: ");
+    Serial.print(totalBytes);
+    Serial.print(" bytes in ");
+    Serial.print(downloadMs);
+    Serial.print(" ms (");
+    Serial.print(downloadMs > 0 ? (totalBytes * 1000UL) / downloadMs : 0);
+    Serial.println(" bytes/sec)");
+
+    String finish = ReadFTPResponse();
+    FTPDisconnect();
+    if (!IsFTPResponseCode(finish, "226"))
+    {
+        Serial.print("ERROR: ");
+        Serial.print(finish);
+        Serial.println(" - download did not complete successfully");
+        sprintf(returnMessage, "ERROR: download did not complete");
+        return false;
+    }
+
+    Serial.println("Download successful!");
+    sprintf(returnMessage, "Got %lu bytes", totalBytes);
+    return true;
+}
