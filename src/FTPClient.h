@@ -16,8 +16,12 @@ class FTPClient {
 public:
     static constexpr uint16_t DEFAULT_FTP_PORT = 21;
     int ftpListenerPort = 21;
-    // NOTE: reverted to the known-good 256 B / 10 ms pacing to confirm full
-    // transfers. Raise these again (e.g. 512 / 2) once a 200 K file lands whole.
+    // Speed tuning result (measured on the AirLift over SPI):
+    //   - 512 B chunks fail with a partial send regardless of pacing -> the
+    //     nina-fw has a practical ~256 B per-sendData ceiling. Keep chunk = 256.
+    //   - Pacing below 10 ms (tried 5 ms and 2 ms) also fails with a partial
+    //     send: the module's TCP buffer needs ~10 ms to drain each 256 B chunk.
+    // 256 B / 10 ms (~25 KB/s) is the reliable ceiling for this hardware/link.
     static constexpr uint16_t FTP_CHUNK_SIZE = 256;
     static constexpr unsigned long RESPONSE_TIMEOUT = 8000;
     // The car is out of WiFi range while running and only re-enters coverage in

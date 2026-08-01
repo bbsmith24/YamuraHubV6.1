@@ -676,8 +676,9 @@ bool FTPClient::UploadFileFromSDtoFTPServer(const char* remoteFile, const char* 
     size_t sent = 0;
     size_t bytesRead;
     unsigned long lastProgress = millis();
+    unsigned long uploadStart = millis();
 
-    while ((bytesRead = localFile.read(buffer, FTP_CHUNK_SIZE)) > 0) 
+    while ((bytesRead = localFile.read(buffer, FTP_CHUNK_SIZE)) > 0)
     {
         if (!WriteAllToFTPClient(dataClient, buffer, bytesRead))
         {
@@ -722,6 +723,16 @@ bool FTPClient::UploadFileFromSDtoFTPServer(const char* remoteFile, const char* 
         FTPDisconnect();
         return false;
     }
+
+    // Throughput of the data phase (excludes the drain/close below) for tuning.
+    unsigned long uploadMs = millis() - uploadStart;
+    Serial.print("Transfer: ");
+    Serial.print(sent);
+    Serial.print(" bytes in ");
+    Serial.print(uploadMs);
+    Serial.print(" ms (");
+    Serial.print(uploadMs > 0 ? (sent * 1000UL) / uploadMs : 0);
+    Serial.println(" bytes/sec)");
 
     // flush() is a no-op in this fork, so give the last in-flight bytes time to
     // leave the module before closing; otherwise the server sees EOF early and
