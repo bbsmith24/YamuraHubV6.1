@@ -153,33 +153,68 @@ String FTPClient::SendFTPCommand(const char* cmd) {
     return ReadFTPResponse();
 }
 
-bool FTPClient::FTPConnect(const char* host, uint16_t port, const char* user, const char* pass) 
+bool FTPClient::EnsureWiFiConnected()
+{
+    if (WiFi.status() == WL_CONNECTED)
+    {
+        Serial.println("OK: WiFi already connected");
+        return true;
+    }
+
+    for (int attempt = 1; attempt <= WIFI_CONNECT_ATTEMPTS; attempt++)
+    {
+        Serial.print("Connecting to WiFi network '");
+        Serial.print(SSID);
+        Serial.print("/");
+        Serial.print(PASSWORD);
+        Serial.print("' (attempt ");
+        Serial.print(attempt);
+        Serial.print(" of ");
+        Serial.print(WIFI_CONNECT_ATTEMPTS);
+        Serial.println(")...");
+
+        WiFi.begin(SSID, PASSWORD);
+
+        // Poll status ourselves rather than trusting begin()'s single return.
+        unsigned long start = millis();
+        while (millis() - start < WIFI_CONNECT_TIMEOUT)
+        {
+            if (WiFi.status() == WL_CONNECTED)
+            {
+                Serial.print("OK: WiFi connected, IP address ");
+                Serial.println(WiFi.localIP());
+                return true;
+            }
+            delay(250);
+        }
+
+        Serial.print("WiFi not connected within ");
+        Serial.print(WIFI_CONNECT_TIMEOUT / 1000);
+        Serial.print("s (status = ");
+        Serial.print(WiFi.status());
+        Serial.println("), likely still out of range");
+
+        // Drop the half-open association so the next begin() starts clean.
+        WiFi.disconnect();
+        delay(500);
+    }
+
+    Serial.println("ERROR: WiFi connection failed (out of range?)");
+    return false;
+}
+
+bool FTPClient::FTPConnect(const char* host, uint16_t port, const char* user, const char* pass)
 {
     if (!host || !user || !pass) {
         Serial.println("ERROR: NULL parameter passed to connect()");
         return false;
     }
-    // Connect to WiFi
-    Serial.print("Connecting to WiFi network '");
-    Serial.print(SSID);
-    Serial.print("'... ");
-
-    int status = WiFi.begin(SSID, PASSWORD);
-    if (status != WL_CONNECTED) 
+    // Connect to WiFi (re-associates from cold every upload; car is only in
+    // range while in the pits)
+    if (!EnsureWiFiConnected())
     {
-        Serial.println("FAILED");
-        Serial.print("ERROR: WiFi connection failed, status = ");
-        Serial.println(status);
         return false;
     }
-
-    Serial.println("OK");
-    Serial.print("Connected to: ");
-    Serial.println(SSID);
-    Serial.print("IP address: ");
-    Serial.println(WiFi.localIP());
-    Serial.println();
-
 
     Serial.print("Connecting to FTP server ");
     Serial.print(host);
@@ -312,7 +347,7 @@ bool FTPClient::ListFTPServerDirectory(const char* path)
     String listCmd = String("LIST ") + path;
     ftpClient.println(listCmd);
     String status = ReadFTPResponse();
-    if (!IsFTPResponseCode(status, "150")) {
+    if (!IsFTPResponseCode(status, "150") && !IsFTPResponseCode(status, "125")) {
         Serial.println("ERROR: LIST command failed");
         dataClient.stop();
         return false;
@@ -418,7 +453,7 @@ bool FTPClient::DownloadFTPServerFile(const char* remoteFile) {
     String retrieveCmd = String("RETR ") + remoteFile;
     ftpClient.println(retrieveCmd);
     String status = ReadFTPResponse();
-    if (!IsFTPResponseCode(status, "150")) {
+    if (!IsFTPResponseCode(status, "150") && !IsFTPResponseCode(status, "125")) {
         Serial.println("ERROR: RETR command failed");
         dataClient.stop();
         return false;
@@ -472,8 +507,9 @@ bool FTPClient::UploadFileToFTPServer(const char* remoteFile, const uint8_t* dat
 
     String storCmd = String("STOR ") + remoteFile;
     ftpClient.println(storCmd);
+    ftpClient.flush();
     String status = ReadFTPResponse();
-    if (!IsFTPResponseCode(status, "150")) {
+    if (!IsFTPResponseCode(status, "150") && !IsFTPResponseCode(status, "125")) {
         Serial.println("ERROR: STOR command failed");
         dataClient.stop();
         return false;
@@ -535,27 +571,22 @@ bool FTPClient::UploadFileFromSDtoFTPServer(const char* remoteFile, const char* 
     Serial.print(" PORT ");    
     Serial.println(ftpListenerPort);
 
-    if (!FTPConnect(FTP_SERVER, ftpListenerPort/*21*/, FTP_USER, FTP_PASS)) 
+    if (!FTPConnect(FTP_SERVER, ftpListenerPort/*21*/, FTP_USER, FTP_PASS))
     {
+        // FTPConnect owns its own WiFi/FTP retry + timeout; failing here most
+        // likely means the car is still out of range. Clean up and let the
+        // caller's retry loop try again.
         Serial.println("ERROR: FTP connection failed!");
-        int waitCount = 0;
-        while (true) 
-        {
-            delay(1000);
-            waitCount++;
-            if (waitCount >= 20) 
-            {
-                Serial.println("Waiting for FTP connection...");
-                sprintf(returnMessage, "ERROR: FTP connection failed after %d seconds", waitCount);
-                return false;
-            }
-        }
+        sprintf(returnMessage, "ERROR: FTP/WiFi connection failed (out of range?)");
+        FTPDisconnect();
+        return false;
     }
 
-    if (!remoteFile || !localFilePath) 
+    if (!remoteFile || !localFilePath)
     {
         Serial.println("ERROR: NULL parameter passed to uploadFileFromStorage()");
         sprintf(returnMessage, "ERROR: NULL parameter passed to uploadFileFromStorage()");
+        FTPDisconnect();
         return false;
     }
 
@@ -572,10 +603,12 @@ bool FTPClient::UploadFileFromSDtoFTPServer(const char* remoteFile, const char* 
     SendFTPCommand("TYPE I");
 
     File localFile = SD.open(localFilePath, FILE_READ);
-    if (!localFile) 
+    if (!localFile)
     {
         Serial.print("ERROR: Failed to open local file: ");
         Serial.println(localFilePath);
+        sprintf(returnMessage, "ERROR: Failed to open local file");
+        FTPDisconnect();
         return false;
     }
     Serial.println("OK: Local file opened successfully");
@@ -585,38 +618,45 @@ bool FTPClient::UploadFileFromSDtoFTPServer(const char* remoteFile, const char* 
     Serial.print(fileSize);
     Serial.println(" bytes");
 
-    if (fileSize == 0) 
+    if (fileSize == 0)
     {
         Serial.println("ERROR: Cannot upload empty file");
         sprintf(returnMessage, "ERROR: Cannot upload empty file");
         localFile.close();
+        FTPDisconnect();
         return false;
     }
 
     uint16_t dataPort = 0;
-    if (!EnterFTPPassiveMode(dataPort)) 
+    if (!EnterFTPPassiveMode(dataPort))
     {
+        sprintf(returnMessage, "ERROR: PASV command failed");
         localFile.close();
+        FTPDisconnect();
         return false;
     }
 
-    if (!dataClient.connect(ftpServer, dataPort)) 
+    if (!dataClient.connect(ftpServer, dataPort))
     {
         Serial.println("ERROR: Data connection failed");
+        sprintf(returnMessage, "ERROR: Data connection failed");
         localFile.close();
+        FTPDisconnect();
         return false;
     }
-    Serial.println("OK: Data connection established, begin upload");  
+    Serial.println("OK: Data connection established, begin upload");
 
     String storCmd = String("STOR ") + remoteFile;
     ftpClient.println(storCmd);
+    ftpClient.flush();
     String status = ReadFTPResponse();
-    if (!IsFTPResponseCode(status, "150")) 
+    if (!IsFTPResponseCode(status, "150") && !IsFTPResponseCode(status, "125"))
     {
         Serial.println("ERROR: STOR command failed");
         sprintf(returnMessage, "ERROR: STOR command failed");
         dataClient.stop();
         localFile.close();
+        FTPDisconnect();
         return false;
     }
 
@@ -627,12 +667,14 @@ bool FTPClient::UploadFileFromSDtoFTPServer(const char* remoteFile, const char* 
 
     while ((bytesRead = localFile.read(buffer, FTP_CHUNK_SIZE)) > 0) 
     {
-        if (!WriteAllToFTPClient(dataClient, buffer, bytesRead)) 
+        if (!WriteAllToFTPClient(dataClient, buffer, bytesRead))
         {
+            // Link likely dropped mid-transfer (car rolled out of range).
             Serial.println("ERROR: Failed to write to FTP server");
             sprintf(returnMessage, "ERROR: Failed to write to FTP server");
             localFile.close();
             dataClient.stop();
+            FTPDisconnect();
             return false;
         }
         sent += bytesRead;
@@ -647,7 +689,9 @@ bool FTPClient::UploadFileFromSDtoFTPServer(const char* remoteFile, const char* 
             Serial.println(" bytes)");
             lastProgress = millis();
         }
-        delay(10);
+        // No fixed per-chunk pacing: WriteAllToFTPClient already backs off when
+        // the NINA send buffer is full, so throttling here just wastes bandwidth.
+        delay(0);
     }
 
     localFile.close();
@@ -660,14 +704,17 @@ bool FTPClient::UploadFileFromSDtoFTPServer(const char* remoteFile, const char* 
     Serial.println("Upload complete, waiting for server confirmation...");
 
     String finish = ReadFTPResponse();
-    if (!IsFTPResponseCode(finish, "226")) 
+    FTPDisconnect();
+    if (!IsFTPResponseCode(finish, "226"))
     {
+        // Server did not confirm the transfer completed - report failure so the
+        // caller retries instead of treating a partial upload as success.
         Serial.print("ERROR: ");
         Serial.print(finish);
         Serial.println(" - upload did not complete successfully");
         sprintf(returnMessage, "ERROR: upload did not complete successfully");
+        return false;
     }
-    FTPDisconnect();   
     Serial.println("Upload successful!");
     sprintf(returnMessage, "Upload successful");
     return true;
@@ -715,7 +762,7 @@ bool FTPClient::DownloadFileFromFTPServerToSD(const char* remoteFile, const char
     String retrieveCmd = String("RETR ") + remoteFile;
     ftpClient.println(retrieveCmd);
     String status = ReadFTPResponse();
-    if (!IsFTPResponseCode(status, "150")) {
+    if (!IsFTPResponseCode(status, "150") && !IsFTPResponseCode(status, "125")) {
         Serial.println("ERROR: RETR command failed");
         dataClient.stop();
         return false;

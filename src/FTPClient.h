@@ -16,9 +16,13 @@ class FTPClient {
 public:
     static constexpr uint16_t DEFAULT_FTP_PORT = 21;
     int ftpListenerPort = 21;
-    //static constexpr uint16_t FTP_CHUNK_SIZE = 512;
-    static constexpr uint16_t FTP_CHUNK_SIZE = 256;
+    static constexpr uint16_t FTP_CHUNK_SIZE = 512;
     static constexpr unsigned long RESPONSE_TIMEOUT = 8000;
+    // The car is out of WiFi range while running and only re-enters coverage in
+    // the pits, so every upload re-associates from a cold state. Poll status for
+    // this long per attempt, and re-issue begin() this many times, before giving up.
+    static constexpr unsigned long WIFI_CONNECT_TIMEOUT = 20000;
+    static constexpr int WIFI_CONNECT_ATTEMPTS = 3;
 
     /*
      * @brief Connect to FTP server with given credentials
@@ -89,6 +93,17 @@ private:
     WiFiClient ftpClient;
     WiFiClient dataClient;
     const char* ftpServer;
+
+    /**
+     * @brief Associate with the WiFi network, polling status with retries.
+     *
+     * WiFiNINA's begin() returns whatever status its internal poll happened to
+     * end on, which is often WL_DISCONNECTED/WL_CONNECT_FAILED on a slow-but-fine
+     * association. This polls WiFi.status() until WL_CONNECTED or a timeout, and
+     * re-issues begin() a few times, treating "out of range" as a clean failure.
+     * @return true once associated, false if it could not connect (likely out of range)
+     */
+    bool EnsureWiFiConnected();
 
     /**
      * @brief Read FTP response from server
