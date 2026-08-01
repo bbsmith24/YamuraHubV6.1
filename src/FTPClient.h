@@ -16,13 +16,22 @@ class FTPClient {
 public:
     static constexpr uint16_t DEFAULT_FTP_PORT = 21;
     int ftpListenerPort = 21;
-    static constexpr uint16_t FTP_CHUNK_SIZE = 512;
+    // NOTE: reverted to the known-good 256 B / 10 ms pacing to confirm full
+    // transfers. Raise these again (e.g. 512 / 2) once a 200 K file lands whole.
+    static constexpr uint16_t FTP_CHUNK_SIZE = 256;
     static constexpr unsigned long RESPONSE_TIMEOUT = 8000;
     // The car is out of WiFi range while running and only re-enters coverage in
     // the pits, so every upload re-associates from a cold state. Poll status for
     // this long per attempt, and re-issue begin() this many times, before giving up.
     static constexpr unsigned long WIFI_CONNECT_TIMEOUT = 20000;
     static constexpr int WIFI_CONNECT_ATTEMPTS = 3;
+    // WiFiClient::flush() is a no-op in this fork and checkDataSent() only
+    // confirms the ESP32 buffered a chunk, not that it reached the server. Pace
+    // writes so the module's TCP buffer can't build a huge backlog, and let the
+    // tail drain before closing the data socket - otherwise STOR closes early
+    // and the server records a truncated file (still replying 226).
+    static constexpr unsigned long FTP_CHUNK_PACING_MS = 10;
+    static constexpr unsigned long FTP_DRAIN_MS = 400;
 
     /*
      * @brief Connect to FTP server with given credentials

@@ -661,6 +661,7 @@ void SendFile(char* fileNameToSend)
 
       textPosition[1] += tftMenu.fontHeight;
       sprintf(outStr, "Result %s", sendResult ? "OK" : "ERROR");
+      tftDisplay.drawString(outStr, textPosition[0], textPosition[1], GFXFF);
 
       textPosition[1] += tftMenu.fontHeight;
       sprintf(outStr, " %s",statusStr);
@@ -673,6 +674,19 @@ void SendFile(char* fileNameToSend)
         textPosition[1] += tftMenu.fontHeight;
         tftMenu.WaitForAnyButton();
         break;
+      }
+
+      // On failure, hold the error on screen long enough to read before the next
+      // attempt's fillScreen wipes it (also acts as a backoff between retries).
+      if(!sendResult)
+      {
+        #ifdef DEBUG_VERBOSE
+        Serial.print("Send attempt ");
+        Serial.print(attemptCount + 1);
+        Serial.print(" failed: ");
+        Serial.println(statusStr);
+        #endif
+        delay(3000);
       }
       attemptCount++;
     }

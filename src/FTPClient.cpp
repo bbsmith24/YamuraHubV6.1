@@ -4,30 +4,42 @@
 #include <SD.h>
 
 
-static bool WriteAllToFTPClient(WiFiClient& client, const uint8_t* buffer, size_t length, unsigned long timeoutMs = 5000) 
+static bool WriteAllToFTPClient(WiFiClient& client, const uint8_t* buffer, size_t length, unsigned long timeoutMs = 10000)
 {
     size_t totalWritten = 0;
     unsigned long start = millis();
 
-    while (totalWritten < length && client.connected()) 
+    while (totalWritten < length)
     {
         size_t written = client.write(buffer + totalWritten, length - totalWritten);
-        if (written > 0) 
+        if (written > 0)
         {
             totalWritten += written;
             start = millis();
         }
-        else if (millis() - start > timeoutMs) 
+        else
         {
-            return false;
-        } 
-        else 
-        {
-            delay(10);
+            // write() returned 0: NINA send buffer momentarily full, or the
+            // socket is gone. Only bail if it is really gone or we have stalled
+            // past the timeout - a transient blip must not abort (and truncate)
+            // the transfer. connected() is checked here (not every iteration)
+            // because it costs an SPI round-trip and can close a socket that is
+            // briefly in a transitional TCP state.
+            if (!client.connected())
+            {
+                Serial.println("ERROR: data connection dropped mid-write");
+                return false;
+            }
+            if (millis() - start > timeoutMs)
+            {
+                Serial.println("ERROR: timed out waiting for NINA send buffer to drain");
+                return false;
+            }
+            delay(5);
         }
     }
 
-    return totalWritten == length;
+    return true;
 }
 
 bool FTPClient::IsFTPResponseCode(const String& response, const char* code) {
@@ -689,18 +701,38 @@ bool FTPClient::UploadFileFromSDtoFTPServer(const char* remoteFile, const char* 
             Serial.println(" bytes)");
             lastProgress = millis();
         }
-        // No fixed per-chunk pacing: WriteAllToFTPClient already backs off when
-        // the NINA send buffer is full, so throttling here just wastes bandwidth.
-        delay(0);
+        // Pace writes so the ESP32's TCP buffer can't build a huge backlog that
+        // stop() would then discard (see FTP_CHUNK_PACING_MS in the header).
+        delay(FTP_CHUNK_PACING_MS);
     }
 
     localFile.close();
+
+    // Guard against a short read/write path silently truncating the file.
+    if (sent != fileSize)
+    {
+        Serial.print("ERROR: only queued ");
+        Serial.print(sent);
+        Serial.print(" of ");
+        Serial.print(fileSize);
+        Serial.println(" bytes - aborting to avoid a truncated upload");
+        sprintf(returnMessage, "ERROR: incomplete upload (%u/%u bytes)",
+                (unsigned)sent, (unsigned)fileSize);
+        dataClient.stop();
+        FTPDisconnect();
+        return false;
+    }
+
+    // flush() is a no-op in this fork, so give the last in-flight bytes time to
+    // leave the module before closing; otherwise the server sees EOF early and
+    // writes a truncated file while still replying 226.
+    delay(FTP_DRAIN_MS);
     dataClient.stop();
     Serial.print("Sent ");
     Serial.print(sent);
     Serial.print(" bytes, expected to send ");
     Serial.print(fileSize);
-    Serial.println(" bytes");    
+    Serial.println(" bytes");
     Serial.println("Upload complete, waiting for server confirmation...");
 
     String finish = ReadFTPResponse();
