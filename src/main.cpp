@@ -477,10 +477,7 @@ void loop()
       deviceState = DISPLAY_MENU;
       break;
     case LIST_FILES:
-      Serial.println("ListFiles() - listing files");  
-      root = SD.open("/");
-      ListFiles(root);
-      deviceState = DISPLAY_MENU;
+      ListFilesMenu();  // shows files on the TFT; returns to the settings menu
       break;
     case SELECT_FTP_PORT:
       Serial.println("SelectFtpPort() - selecting FTP port");
@@ -1538,4 +1535,34 @@ void SelectDebugDisplay()
     Serial.print("Debug display ");
     Serial.println(debugDisplay ? "ON" : "OFF");
     #endif
+}
+//
+// list SD files on the TFT as a menu; the selection is informational only -
+// any choice just returns to the settings menu
+//
+void ListFilesMenu()
+{
+    root = SD.open("/");
+    int fileCount = CountFiles(root);
+    if (fileCount <= 0)
+    {
+        tftMenu.NotImplementedScreen("No files on SD card");
+        deviceState = CHANGE_SETTINGS;
+        return;
+    }
+
+    TFTMenu::MenuChoice *filesMenu = (TFTMenu::MenuChoice*)calloc(fileCount, sizeof(TFTMenu::MenuChoice));
+    if (!filesMenu)
+    {
+        tftMenu.NotImplementedScreen("Out of memory building list");
+        deviceState = CHANGE_SETTINGS;
+        return;
+    }
+    root = SD.open("/");
+    LoadLocalFileMenu(root, filesMenu);
+
+    tftMenu.MenuSelect(12, filesMenu, fileCount, 0);  // selection ignored
+    free(filesMenu);
+
+    deviceState = CHANGE_SETTINGS;  // back to the settings menu
 }
