@@ -240,6 +240,7 @@ int  GetNextLogFileIdx();
 void SelectLocalFile(char *selectedFile);
 void SendFileMenu();
 void ListFiles(File dir);
+void ListFilesMenu();
 void DeleteAllFiles(File dir);
 void DeleteLogFiles(File dir);
 void SendFile(char* fileNameToSend);
