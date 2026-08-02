@@ -33,6 +33,15 @@ Install these libraries:
 6. For full debug messages, uncomment #define DEBUG_EXTRA_VERBOSE. Use #define DEBUG_VERBOSE for more serious(?) messages
 7. Open Serial Monitor at `115200` baud.
 
+## Configuration (SD `config.ini`)
+
+The values in `WiFiSecrets.h` are compiled-in **defaults**. If a `config.ini`
+file is present at the top level of the SD card, its fields override those
+defaults at boot, and its `[drivers]` section fills the Select Driver menu.
+Copy `config.ini.sample` to the card as `config.ini` and edit it. Any field you
+omit keeps its compiled default. This keeps real credentials off committed
+source. See `Config.h` for the format.
+
 ## Notes
 
 - To log anything, you need at least 1 YamuraLog node (GPS, IMU, A/D), appropriate CAN cables and terminators.

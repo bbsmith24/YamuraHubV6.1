@@ -40,6 +40,7 @@
 // 
 
 #include "main.h"        // Contains pin definitions
+#include "Config.h"      // Effective WiFi/FTP settings + driver list (config.ini)
 
 // Global FTP client instance
 FTPClient ftpClient;
@@ -308,6 +309,11 @@ void setup()
     root.close();
 
     #endif
+
+    // Load /config.ini if present - overrides the WiFi/FTP defaults from
+    // WiFiSecrets.h and populates the driver list.
+    LoadConfigFromSD("/config.ini");
+    ftpClient.ftpListenerPort = FTP_PORT;  // config default; Settings menu can still change it
     // Initialize TFT display
     tftMenu.TFTInitialization();
 
@@ -477,8 +483,12 @@ void loop()
       deviceState = DISPLAY_MENU;
       break;
     case SELECT_FTP_PORT:
-      Serial.println("SelectFtpPort() - selecting FTP port");  
+      Serial.println("SelectFtpPort() - selecting FTP port");
       SelectFtpPort();
+      deviceState = DISPLAY_MENU;
+      break;
+    case SELECT_DEBUG:
+      SelectDebugDisplay();
       deviceState = DISPLAY_MENU;
       break;
     default:
@@ -523,8 +533,68 @@ void SelectDriverMenu()
     #ifdef DEBUG_VERBOSE
     Serial.println("SelectDriverMenu() - displaying select driver menu");
     #endif
-    tftMenu.NotImplementedScreen("Select driver not implemented");
+
+    if (driverCount <= 0)
+    {
+        tftMenu.NotImplementedScreen("No drivers in config.ini");
+        deviceState = DISPLAY_MENU;
+        return;
+    }
+
+    // build a selectable menu from the driver list (same pattern as SelectLocalFile)
+    TFTMenu::MenuChoice *driverMenu = (TFTMenu::MenuChoice*)calloc(driverCount, sizeof(TFTMenu::MenuChoice));
+    if (!driverMenu)
+    {
+        tftMenu.NotImplementedScreen("Out of memory building list");
+        deviceState = DISPLAY_MENU;
+        return;
+    }
+    for (int i = 0; i < driverCount; i++)
+    {
+        driverMenu[i].description = driverNames[i];
+        driverMenu[i].result = i;
+    }
+
+    int selectedIdx = tftMenu.MenuSelect(12, driverMenu, driverCount, 0);
+    strncpy(currentDriver, driverMenu[selectedIdx].description.c_str(), CFG_DRIVER_LEN - 1);
+    currentDriver[CFG_DRIVER_LEN - 1] = '\0';
+    free(driverMenu);
+
+    #ifdef DEBUG_VERBOSE
+    Serial.print("Selected driver: ");
+    Serial.println(currentDriver);
+    #endif
+
     deviceState = DISPLAY_MENU;
+}
+//
+// Filesystem-safe log filename prefix built from the selected driver name:
+// keeps only letters/digits/'-'/'_' (dropping spaces, dots and anything else the
+// menu parser or FAT dislikes) and caps the length so the full
+// "/<prefix>NNN.yl5" name fits sendLogFileName / the SD library. Falls back to
+// "sdLog" when no driver is chosen or the name has no usable characters.
+//
+const char* LogFilePrefix()
+{
+    // Leave room for '/', up to a 5-digit index, ".yl5" and the null terminator.
+    static const size_t maxPrefix = sizeof(sendLogFileName) - 1 - 5 - 4 - 1;
+    static char prefix[sizeof(sendLogFileName)];
+    size_t n = 0;
+    for (const char* p = currentDriver; *p != '\0' && n < maxPrefix; p++)
+    {
+        char c = *p;
+        if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
+            (c >= '0' && c <= '9') || c == '-' || c == '_')
+        {
+            prefix[n++] = c;
+        }
+    }
+    prefix[n] = '\0';
+    if (n == 0)
+    {
+        strcpy(prefix, "sdLog");
+    }
+    return prefix;
 }
 //
 //
@@ -536,7 +606,7 @@ void StartLogging()
     #endif
     timer.end();  // stop heartbeat before logging starts
     int fileIdx = GetNextLogFileIdx();
-    sprintf(sendLogFileName, "/sdLog%03d.yl5", fileIdx);
+    sprintf(sendLogFileName, "/%s%03d.yl5", LogFilePrefix(), fileIdx);
     #ifdef DEBUG_VERBOSE
     Serial.printf("Opening log file %s for writing\n", sendLogFileName);
     #endif
@@ -652,6 +722,20 @@ void SendFile(char* fileNameToSend)
       sprintf(sendLogFileName, "%s", fileNameToSend );
       tftDisplay.drawString(outStr, textPosition[0], textPosition[1], GFXFF);
       textPosition[1] += tftMenu.fontHeight;
+      // when debug display is on, show the WiFi + FTP credentials in use;
+      // otherwise just the file name is shown
+      if (debugDisplay)
+      {
+        sprintf(outStr, "WiFi %s  pass %s", SSID, PASSWORD);
+        tftDisplay.drawString(outStr, textPosition[0], textPosition[1], GFXFF);
+        textPosition[1] += tftMenu.fontHeight;
+        sprintf(outStr, "FTP user %s  pass %s", FTP_USER, FTP_PASS);
+        tftDisplay.drawString(outStr, textPosition[0], textPosition[1], GFXFF);
+        textPosition[1] += tftMenu.fontHeight;
+        sprintf(outStr, "FTP port %d", ftpClient.ftpListenerPort);
+        tftDisplay.drawString(outStr, textPosition[0], textPosition[1], GFXFF);
+        textPosition[1] += tftMenu.fontHeight;
+      }
       // send the file to the FTP server
       char statusStr[256];
       sendResult = ftpClient.UploadFileFromSDtoFTPServer(fileNameToSend, fileNameToSend, statusStr);
@@ -818,8 +902,8 @@ void ChangeSettingsMenu()
     #ifdef DEBUG_EXTRA_VERBOSE
     Serial.println("ChangeSettingsMenu() - displaying settings menu");
     #endif
-    int menuCount = 5;
-    TFTMenu::MenuChoice settingsMenuChoices[5];
+    int menuCount = 6;
+    TFTMenu::MenuChoice settingsMenuChoices[6];
     settingsMenuChoices[0].description = "Delete log files";
     settingsMenuChoices[0].result = DELETE_LOG_FILES;
     settingsMenuChoices[1].description = "Delete all files";
@@ -828,8 +912,10 @@ void ChangeSettingsMenu()
     settingsMenuChoices[2].result = LIST_FILES;
     settingsMenuChoices[3].description = "FTP Port";
     settingsMenuChoices[3].result = SELECT_FTP_PORT;
-    settingsMenuChoices[4].description = "Exit";
-    settingsMenuChoices[4].result = DISPLAY_MENU;
+    settingsMenuChoices[4].description = "Debug display";
+    settingsMenuChoices[4].result = SELECT_DEBUG;
+    settingsMenuChoices[5].description = "Exit";
+    settingsMenuChoices[5].result = DISPLAY_MENU;
     deviceState = tftMenu.MenuSelect(12, settingsMenuChoices, menuCount, DELETE_LOG_FILES);
     #ifdef DEBUG_EXTRA_VERBOSE
     Serial.print("ChangeSettingsMenu() - selected menu item: ");
@@ -1175,7 +1261,9 @@ int GetNextLogFileIdx()
       continue;
     }
     String fileName = entry.name();
-    if (fileName.startsWith("sdLog", 0)) 
+    // Count this driver's existing logs (or "sdLog" files if no driver chosen)
+    // so the next index continues that driver's sequence.
+    if (fileName.startsWith(LogFilePrefix()))
     {
       logIdx++;
     }
@@ -1428,5 +1516,26 @@ void SelectFtpPort()
     ftpPortMenuChoices[2].description = "Port 2021";
     ftpPortMenuChoices[2].result = 2021;
     int selectedPort = tftMenu.MenuSelect(12, ftpPortMenuChoices, 3, 0);
-    ftpClient.ftpListenerPort = selectedPort; 
+    if (selectedPort != ftpClient.ftpListenerPort)
+    {
+        ftpClient.ftpListenerPort = selectedPort;
+        // persist the change so it survives a power cycle
+        SaveFtpPortToConfig("/config.ini", selectedPort);
+    }
+}
+//
+// turn the debug display (WiFi/FTP credentials on the Sending screen) on or off
+//
+void SelectDebugDisplay()
+{
+    TFTMenu::MenuChoice debugMenuChoices[2];
+    debugMenuChoices[0].description = "Debug display OFF";
+    debugMenuChoices[0].result = 0;
+    debugMenuChoices[1].description = "Debug display ON";
+    debugMenuChoices[1].result = 1;
+    debugDisplay = (tftMenu.MenuSelect(12, debugMenuChoices, 2, debugDisplay ? 1 : 0) != 0);
+    #ifdef DEBUG_VERBOSE
+    Serial.print("Debug display ");
+    Serial.println(debugDisplay ? "ON" : "OFF");
+    #endif
 }

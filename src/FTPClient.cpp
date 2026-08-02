@@ -1,6 +1,6 @@
 #include <Arduino.h>
 #include "FTPClient.h"
-#include "WiFiSecrets.h"
+#include "Config.h"
 #include <SD.h>
 
 
