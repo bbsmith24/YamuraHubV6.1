@@ -52,14 +52,16 @@
 #define LIST_FILES 8
 #define SEND_LAST_FILE 9
 #define SELECT_FTP_PORT 10
+#define SELECT_DEBUG 11
 
 // current state of logger
 int deviceState = 0;
 bool logData = false;
-char sendLogFileName[20];
+char sendLogFileName[64];  // holds "/<driverPrefix>NNN.yl5"; 64 = SD MAX_FILENAME_LEN
 bool gpsStatus = false;
 int gpsSIV = 0;
 char outStr[512];
+bool debugDisplay = false;  // when true, the Sending screen shows WiFi/FTP credentials
 unsigned long currentMillis = 0;
 // CAN setup
 #define ARB_BAUD 500000
@@ -242,3 +244,4 @@ void DeleteAllFiles(File dir);
 void DeleteLogFiles(File dir);
 void SendFile(char* fileNameToSend);
 void SelectFtpPort();
+void SelectDebugDisplay();

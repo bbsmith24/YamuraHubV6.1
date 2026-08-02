@@ -16,9 +16,26 @@ class FTPClient {
 public:
     static constexpr uint16_t DEFAULT_FTP_PORT = 21;
     int ftpListenerPort = 21;
-    //static constexpr uint16_t FTP_CHUNK_SIZE = 512;
+    // Speed tuning result (measured on the AirLift over SPI):
+    //   - 512 B chunks fail with a partial send regardless of pacing -> the
+    //     nina-fw has a practical ~256 B per-sendData ceiling. Keep chunk = 256.
+    //   - Pacing below 10 ms (tried 5 ms and 2 ms) also fails with a partial
+    //     send: the module's TCP buffer needs ~10 ms to drain each 256 B chunk.
+    // 256 B / 10 ms (~25 KB/s) is the reliable ceiling for this hardware/link.
     static constexpr uint16_t FTP_CHUNK_SIZE = 256;
     static constexpr unsigned long RESPONSE_TIMEOUT = 8000;
+    // The car is out of WiFi range while running and only re-enters coverage in
+    // the pits, so every upload re-associates from a cold state. Poll status for
+    // this long per attempt, and re-issue begin() this many times, before giving up.
+    static constexpr unsigned long WIFI_CONNECT_TIMEOUT = 20000;
+    static constexpr int WIFI_CONNECT_ATTEMPTS = 3;
+    // WiFiClient::flush() is a no-op in this fork and checkDataSent() only
+    // confirms the ESP32 buffered a chunk, not that it reached the server. Pace
+    // writes so the module's TCP buffer can't build a huge backlog, and let the
+    // tail drain before closing the data socket - otherwise STOR closes early
+    // and the server records a truncated file (still replying 226).
+    static constexpr unsigned long FTP_CHUNK_PACING_MS = 10;
+    static constexpr unsigned long FTP_DRAIN_MS = 400;
 
     /*
      * @brief Connect to FTP server with given credentials
@@ -85,10 +102,47 @@ public:
      */
     bool UploadFileFromSDtoFTPServer(const char* remoteFile, const char* localFilePath, char* returnMessage);
 
+    /**
+     * @brief Connect, fetch the server's file list (NLST) for a path, disconnect.
+     *
+     * Self-contained (mirrors UploadFileFromSDtoFTPServer): it opens its own
+     * WiFi/FTP connection and closes it before returning, so the caller can show
+     * a menu without holding the connection open.
+     * @param path Remote directory to list (e.g. "/")
+     * @param outNames Caller-provided array to fill with bare filenames
+     * @param maxNames Capacity of outNames
+     * @param returnMessage Status/error text (buffer >= 64 bytes)
+     * @return number of names filled (>= 0), or -1 on error
+     */
+    int GetFTPServerFileList(const char* path, String* outNames, int maxNames, char* returnMessage);
+
+    /**
+     * @brief Connect, download a file from the server to SD, disconnect.
+     *
+     * Self-contained counterpart to UploadFileFromSDtoFTPServer. Overwrites any
+     * existing local file so it does not append.
+     * @param remoteFile Remote filename to fetch
+     * @param localFilePath Destination path on the SD card (e.g. "/name.yl5")
+     * @param returnMessage Status/error text (buffer >= 64 bytes)
+     * @return true on success, false otherwise
+     */
+    bool GetFileFromFTPServer(const char* remoteFile, const char* localFilePath, char* returnMessage);
+
 private:
     WiFiClient ftpClient;
     WiFiClient dataClient;
     const char* ftpServer;
+
+    /**
+     * @brief Associate with the WiFi network, polling status with retries.
+     *
+     * WiFiNINA's begin() returns whatever status its internal poll happened to
+     * end on, which is often WL_DISCONNECTED/WL_CONNECT_FAILED on a slow-but-fine
+     * association. This polls WiFi.status() until WL_CONNECTED or a timeout, and
+     * re-issues begin() a few times, treating "out of range" as a clean failure.
+     * @return true once associated, false if it could not connect (likely out of range)
+     */
+    bool EnsureWiFiConnected();
 
     /**
      * @brief Read FTP response from server

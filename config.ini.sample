@@ -1,0 +1,24 @@
+# YamuraLog hub configuration.
+#
+# Copy this file to the SD card as /config.ini (top level). If present, its
+# values override the compiled defaults in src/WiFiSecrets.h at boot. Any field
+# you omit keeps its compiled default. Sections and keys are case-insensitive.
+# Lines starting with '#' or ';' are comments.
+
+[wifi]
+ssid=YOUR_SSID
+password=YOUR_WIFI_PASSWORD
+
+[ftp]
+server=192.168.4.2
+user=YOUR_FTP_USER
+pass=YOUR_FTP_PASSWORD
+path=/
+port=21
+
+# One driver name per line. Shown in the Select Driver menu (max 24).
+[drivers]
+Pete
+Aron
+Zoey
+Dora
