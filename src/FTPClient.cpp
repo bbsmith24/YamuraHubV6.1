@@ -896,7 +896,11 @@ int FTPClient::GetFTPServerFileList(const char* path, String* outNames, int maxN
         {
             char c = (char)dataClient.read();
             start = millis();
-            if (c == '\n')
+            // Accept CRLF, LF or bare CR line endings. Some FTP servers (e.g.
+            // GoFTP on iOS) terminate NLST lines with CR only; splitting on LF
+            // alone collapses the whole listing onto one line. A CR followed by
+            // LF just finalizes an already-empty line, so no blank entries.
+            if (c == '\r' || c == '\n')
             {
                 line.trim();
                 // Strip any directory prefix in case the server returns paths.
@@ -911,7 +915,7 @@ int FTPClient::GetFTPServerFileList(const char* path, String* outNames, int maxN
                 }
                 line = "";
             }
-            else if (c != '\r')
+            else
             {
                 line += c;
             }
