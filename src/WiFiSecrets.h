@@ -3,19 +3,19 @@
 
 // Compiled-in defaults for WiFi + FTP.
 //
-// These are used as-is unless a /config.ini file is present on the SD card, in
-// which case matching fields there override these values at boot. See Config.h
-// and LoadConfigFromSD(). Keeping credentials in /config.ini (on the card) lets
-// you keep real secrets out of committed source.
+// These are PLACEHOLDERS - put your real credentials in a /config.ini on the SD
+// card, whose matching fields override these at boot (see Config.h /
+// LoadConfigFromSD). This keeps real secrets out of committed source. Without a
+// config.ini the device will not connect until you replace these placeholders.
 
 // WiFi credentials
-#define DEFAULT_SSID       "YamuraLog"
-#define DEFAULT_PASSWORD   "PeteAron"
+#define DEFAULT_SSID       "YOUR_SSID"
+#define DEFAULT_PASSWORD   "YOUR_WIFI_PASSWORD"
 
 // FTP configuration
 #define DEFAULT_FTP_SERVER "192.168.4.2"
-#define DEFAULT_FTP_USER   "ftpuser"
-#define DEFAULT_FTP_PASS   "ZoeyDora48375"
+#define DEFAULT_FTP_USER   "YOUR_FTP_USER"
+#define DEFAULT_FTP_PASS   "YOUR_FTP_PASSWORD"
 #define DEFAULT_FTP_PATH   "/"
 #define DEFAULT_FTP_PORT   21
 
