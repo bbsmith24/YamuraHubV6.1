@@ -864,9 +864,12 @@ int FTPClient::GetFTPServerFileList(const char* path, String* outNames, int maxN
         return -1;
     }
 
-    // NLST returns bare filenames (one per line), which is far easier to parse
-    // into a menu than the ls -l style output of LIST.
-    String listCmd = String("NLST ") + path;
+    // Use LIST (one CRLF-terminated "ls -l" line per file) rather than NLST.
+    // NLST would be simpler to parse, but some servers (GoFTP on iOS) emit NLST
+    // with NO delimiter between names - one concatenated blob - which is
+    // impossible to split. LIST is delimited reliably across servers; we take
+    // the filename as the last whitespace-separated field of each line.
+    String listCmd = String("LIST ") + path;
     ftpClient.println(listCmd);
     ftpClient.flush();
     String status = ReadFTPResponse();
@@ -880,8 +883,8 @@ int FTPClient::GetFTPServerFileList(const char* path, String* outNames, int maxN
             sprintf(returnMessage, "No files on server");
             return 0;
         }
-        Serial.println("ERROR: NLST command failed");
-        sprintf(returnMessage, "ERROR: NLST command failed");
+        Serial.println("ERROR: LIST command failed");
+        sprintf(returnMessage, "ERROR: LIST command failed");
         dataClient.stop();
         FTPDisconnect();
         return -1;
@@ -890,29 +893,42 @@ int FTPClient::GetFTPServerFileList(const char* path, String* outNames, int maxN
     int count = 0;
     String line;
     unsigned long start = millis();
+    // Unconditional diagnostic (DEBUG_VERBOSE lives in main.h, not visible here):
+    // dump raw LIST bytes so the server's format can be verified.
+    Serial.print("LIST raw bytes (hex):");
+
+    // Pull the filename out of one LIST line: the last whitespace-separated
+    // field. Handles "ls -l" style ("-rw-r--r-- ... name") and bare names.
+    // Skips the Unix "total N" header. Works for names without embedded spaces.
+    auto storeListLine = [&](String l)
+    {
+        l.trim();
+        if (l.length() == 0 || count >= maxNames) return;
+        if (l.startsWith("total ")) return;
+        int sp  = l.lastIndexOf(' ');
+        int tab = l.lastIndexOf('\t');
+        int cut = (tab > sp) ? tab : sp;
+        String name = (cut >= 0) ? l.substring(cut + 1) : l;
+        int slash = name.lastIndexOf('/');
+        if (slash >= 0) name = name.substring(slash + 1);
+        name.trim();
+        if (name.length() > 0) outNames[count++] = name;
+    };
+
     while (dataClient.connected() && millis() - start < RESPONSE_TIMEOUT)
     {
         while (dataClient.available())
         {
             char c = (char)dataClient.read();
             start = millis();
-            // Accept CRLF, LF or bare CR line endings. Some FTP servers (e.g.
-            // GoFTP on iOS) terminate NLST lines with CR only; splitting on LF
-            // alone collapses the whole listing onto one line. A CR followed by
-            // LF just finalizes an already-empty line, so no blank entries.
+            Serial.print(' ');
+            if ((uint8_t)c < 0x10) Serial.print('0');
+            Serial.print((uint8_t)c, HEX);
+            // LIST lines are CR/LF terminated - split on those only (spaces are
+            // field separators *within* a line, not line ends).
             if (c == '\r' || c == '\n')
             {
-                line.trim();
-                // Strip any directory prefix in case the server returns paths.
-                int slash = line.lastIndexOf('/');
-                if (slash >= 0)
-                {
-                    line = line.substring(slash + 1);
-                }
-                if (line.length() > 0 && count < maxNames)
-                {
-                    outNames[count++] = line;
-                }
+                storeListLine(line);
                 line = "";
             }
             else
@@ -921,17 +937,9 @@ int FTPClient::GetFTPServerFileList(const char* path, String* outNames, int maxN
             }
         }
     }
-    // Handle a final line with no trailing newline.
-    line.trim();
-    if (line.length() > 0 && count < maxNames)
-    {
-        int slash = line.lastIndexOf('/');
-        if (slash >= 0)
-        {
-            line = line.substring(slash + 1);
-        }
-        outNames[count++] = line;
-    }
+    Serial.println();
+    // Handle a final line with no trailing terminator.
+    storeListLine(line);
 
     dataClient.stop();
     String finish = ReadFTPResponse();
