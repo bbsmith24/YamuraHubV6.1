@@ -8,6 +8,7 @@
 #include "Free_Fonts.h"  // Include the header file attached to this sketch
 #include "TFTMenu.h"    // Menuing system for TFT display and buttons
 #include <FlexCAN_T4.h>  // CAN-FD https://github.com/tonton81/FlexCAN_T4
+#include <TimeLib.h>
 
 // debug to serial levels
 //#define DEBUG_VERBOSE
@@ -246,3 +247,4 @@ void DeleteLogFiles(File dir);
 void SendFile(char* fileNameToSend);
 void SelectFtpPort();
 void SelectDebugDisplay();
+void DateTimeProvider(uint16_t* date, uint16_t* time);

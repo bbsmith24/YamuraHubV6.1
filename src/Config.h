@@ -23,6 +23,9 @@
 //   path=/
 //   port=21
 //
+//   [time]
+//   utc_offset=-4      ; local = UTC + offset, in hours (EDT -4, PST -8, IST 5.5)
+//
 //   [drivers]
 //   Pete
 //   Aron
@@ -44,6 +47,11 @@ extern char FTP_USER[CFG_STR_LEN];
 extern char FTP_PASS[CFG_STR_LEN];
 extern char FTP_PATH[CFG_STR_LEN];
 extern int  FTP_PORT;
+
+// Offset of local time from UTC, in SECONDS (local = UTC + offset). GPS time is
+// UTC; this is added when setting the system clock so SD file timestamps are
+// local. Default 0. Set via [time] utc_offset (hours) in config.ini.
+extern long UTC_OFFSET_SECONDS;
 
 // Driver list loaded from the [drivers] section, and the current selection.
 extern char driverNames[CFG_MAX_DRIVERS][CFG_DRIVER_LEN];

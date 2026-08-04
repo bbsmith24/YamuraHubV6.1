@@ -16,6 +16,12 @@ pass=YOUR_FTP_PASSWORD
 path=/
 port=21
 
+# GPS time is UTC. Set utc_offset to your local offset from UTC in hours
+# (local = UTC + offset) so logged SD file timestamps are local time.
+# Examples: EDT -4, PST -8, CET 1, IST 5.5. Default 0 keeps UTC.
+[time]
+utc_offset=-4
+
 # One driver name per line. Shown in the Select Driver menu (max 24).
 [drivers]
 Pete

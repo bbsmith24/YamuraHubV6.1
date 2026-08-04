@@ -11,6 +11,7 @@ char FTP_USER[CFG_STR_LEN]   = DEFAULT_FTP_USER;
 char FTP_PASS[CFG_STR_LEN]   = DEFAULT_FTP_PASS;
 char FTP_PATH[CFG_STR_LEN]   = DEFAULT_FTP_PATH;
 int  FTP_PORT                = DEFAULT_FTP_PORT;
+long UTC_OFFSET_SECONDS       = 0;
 
 char driverNames[CFG_MAX_DRIVERS][CFG_DRIVER_LEN];
 int  driverCount = 0;
@@ -89,6 +90,11 @@ static void ApplyConfigLine(const String& line, char* section, size_t sectionLen
                 FTP_PORT = p;
             }
         }
+    }
+    else if (strcmp(section, "time") == 0)
+    {
+        // utc_offset is in hours (may be fractional, e.g. 5.5); store as seconds
+        if (key == "utc_offset") UTC_OFFSET_SECONDS = (long)(val.toFloat() * 3600.0);
     }
 }
 

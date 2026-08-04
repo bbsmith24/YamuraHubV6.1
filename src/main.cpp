@@ -74,7 +74,7 @@ FlexCAN_T4FD<CAN3, RX_SIZE_256, TX_SIZE_16> canFD;  // can3 port
 // RPM       0001001 0000      (only one allowed) 0x90
 // CAN       0001010 0000      (only one allowed) 0xA0
 #define CANID 0x010
-bool timeValid = true;
+bool timeValid = false;
 
 File targetFile;
 ///
@@ -307,8 +307,9 @@ void setup()
     root = SD.open("/");
     ListFiles(root);
     root.close();
-
     #endif
+    // Register the callback sd file date/time callback function
+    SdFile::dateTimeCallback(DateTimeProvider);
 
     // Load /config.ini if present - overrides the WiFi/FTP defaults from
     // WiFiSecrets.h and populates the driver list.
@@ -1083,20 +1084,31 @@ void CAN_GPSMessage(const CANFD_message_t &msg)
   if (!logData) 
   {
     ShowGPSStatus(gpsStatus, gpsSIV);
-    // if (!timeValid) 
-    // {
-    //   //setTime(gpsData.dataStructure.gpsHour, gpsData.dataStructure.gpsMinute, gpsData.dataStructure.gpsSecond, gpsData.dataStructure.gpsDay, gpsData.dataStructure.gpsMonth, gpsData.dataStructure.gpsYear);
-    //   #ifdef DEBUG_VERBOSE
-    //   sprintf(outStr, "Update system date/time from GPS: %02d/%02d/%04d %02d:%02d:%02d UTC", month(),
-    //           day(),
-    //           year(),
-    //           hour(),
-    //           minute(),
-    //           second());
-    //   Serial.println(outStr);
-    //   #endif
-    // }
-    timeValid = true;
+    if (!timeValid)
+    {
+      // GPS time is UTC. Convert to a time_t, add the configured timezone offset
+      // (local = UTC + offset), then set the system clock to local time so SD
+      // file timestamps (via DateTimeProvider) are local.
+      tmElements_t tm;
+      tm.Year   = (gpsData.dataStructure.gpsYear > 99)
+                    ? (gpsData.dataStructure.gpsYear - 1970)   // full year e.g. 2025
+                    : (gpsData.dataStructure.gpsYear + 30);    // 2-digit year e.g. 25
+      tm.Month  = gpsData.dataStructure.gpsMonth;
+      tm.Day    = gpsData.dataStructure.gpsDay;
+      tm.Hour   = gpsData.dataStructure.gpsHour;
+      tm.Minute = gpsData.dataStructure.gpsMinute;
+      tm.Second = gpsData.dataStructure.gpsSecond;
+      time_t local = makeTime(tm) + UTC_OFFSET_SECONDS;
+      setTime(local);
+      //#ifdef DEBUG_VERBOSE
+      sprintf(outStr, "Update system date/time from GPS (UTC%+ldh): %02d/%02d/%04d %02d:%02d:%02d",
+              UTC_OFFSET_SECONDS / 3600,
+              month(local), day(local), year(local),
+              hour(local), minute(local), second(local));
+      Serial.println(outStr);
+      //#endif
+      timeValid = true;
+    }
     return;
   }
   targetFile.write((const uint8_t)msg.id);
@@ -1206,35 +1218,6 @@ void ShowGPSStatus(bool gpsActive, int gpsSIV)
   {
     digitalWrite(GPS_STATUS_LED, HIGH); 
   }
-    // char messageStr[32];
-    //#ifdef DEBUG_VERBOSE
-    // Serial.println("ShowGPSStatus() - displaying GPS status on TFT display");
-    //#endif
-    // sprintf(messageStr, "SIV %02d", gpsSIV);
-  
-    // if (gpsSIV == 0) 
-    // {
-    //   tftDisplay.setTextColor((uint16_t)~TFT_BLACK, (uint16_t)~TFT_RED);
-    // } 
-    // else if (gpsSIV < 4) 
-    // {
-    //   tftDisplay.setTextColor((uint16_t)~TFT_BLACK, (uint16_t)~TFT_ORANGE);
-    // } 
-    // else 
-    // {
-    //   tftDisplay.setTextColor((uint16_t)~TFT_BLACK, (uint16_t)~TFT_GREEN);
-    // }
-    // //tftMenu.SetFont(9);
-    // int xPos = tftMenu.screenSize[0];
-    // int yPos = tftMenu.screenSize[1] - tftMenu.fontHeight / 2;
-    // //tftMenu.DrawString(messageStr, xPos, yPos, GFXFF);
-    
-    // tftDisplay.setTextDatum(BR_DATUM);
-    // tftDisplay.drawString(messageStr, xPos, yPos, GFXFF);
-    // tftDisplay.setTextDatum(TL_DATUM);
-    // tftDisplay.setFreeFont(FSS12);
-    // //tftMenu.fontHeight = tftDisplay.fontHeight(GFXFF);
-    // tftDisplay.setTextColor(TFT_BLACK, TFT_WHITE);
 }
 //
 // get next log file index from files on uSD
@@ -1565,4 +1548,16 @@ void ListFilesMenu()
     free(filesMenu);
 
     deviceState = CHANGE_SETTINGS;  // back to the settings menu
+}
+//
+//
+//
+void DateTimeProvider(uint16_t* date, uint16_t* time) 
+{
+  #ifdef DEBUG_VERBOSE
+  Serial.printf("DateTimeProvider() - %02d/%02d/%04d %02d:%02d:%02d\n", month(), day(), year(), hour(), minute(), second());
+  #endif
+  // Return canonical FAT date and time format
+  *date = FAT_DATE(year(), month(), day());
+  *time = FAT_TIME(hour(), minute(), second());
 }
