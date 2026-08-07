@@ -101,7 +101,9 @@ void setup()
         pinMode(tftMenu.buttons[btnIdx].buttonPin, INPUT_PULLUP);
     }
     // Set TFT display pointer in menu instance
-    tftMenu.tftDisplay = &tftDisplay;   
+    tftMenu.tftDisplay = &tftDisplay;
+    // draw live upload progress on the TFT during sends
+    ftpClient.progressCallback = UploadProgressTFT;
     /// Define main menu choices
     TFTMenu::MenuChoice mainMenuChoices[6];
     mainMenuChoices[0].description = "Start Logging";
@@ -664,6 +666,18 @@ void StartLogging()
 }
 //
 //
+// upload progress callback (registered on ftpClient) - draws the live progress
+// line in place at progressY. fillRect clears the line first so it overwrites
+// cleanly (proportional fonts don't paint a background over old text).
+//
+void UploadProgressTFT(size_t sent, size_t total)
+{
+    int pct = total ? (int)((sent * 100) / total) : 0;
+    sprintf(outStr, "%d%%  %u / %u", pct, (unsigned)sent, (unsigned)total);
+    tftDisplay.fillRect(0, progressY, tftDisplay.width(), tftMenu.fontHeight + 2, TFT_WHITE);
+    tftDisplay.drawString(outStr, 0, progressY, GFXFF);
+}
+//
 //
 void SendFileMenu()
 {
@@ -703,6 +717,9 @@ void SendFile(char* fileNameToSend)
     }
     bool sendResult = false;
     int attemptCount = 0;
+    // Keep WiFi associated across retries within this send - re-associating per
+    // attempt is the slow part; a data-connection drop just needs a fresh try.
+    ftpClient.keepWiFiAlive = true;
     while(!sendResult)
     {
       #ifdef DEBUG_VERBOSE
@@ -734,6 +751,10 @@ void SendFile(char* fileNameToSend)
         tftDisplay.drawString(outStr, textPosition[0], textPosition[1], GFXFF);
         textPosition[1] += tftMenu.fontHeight;
       }
+      // reserve this line for the live upload progress (overwritten in place by
+      // UploadProgressTFT during the transfer); Sent/Result go below it
+      progressY = textPosition[1];
+      textPosition[1] += tftMenu.fontHeight;
       // send the file to the FTP server
       char statusStr[256];
       sendResult = ftpClient.UploadFileFromSDtoFTPServer(fileNameToSend, fileNameToSend, statusStr);
@@ -749,7 +770,7 @@ void SendFile(char* fileNameToSend)
       sprintf(outStr, " %s",statusStr);
       tftDisplay.drawString(outStr, textPosition[0], textPosition[1], GFXFF);
 
-      if(attemptCount > 5)
+      if(attemptCount >= FTP_SEND_MAX_ATTEMPTS - 1)
       {
         textPosition[1] += tftMenu.fontHeight;
         tftDisplay.drawString("Press any button to continue", textPosition[0], textPosition[1], GFXFF);
@@ -758,8 +779,8 @@ void SendFile(char* fileNameToSend)
         break;
       }
 
-      // On failure, hold the error on screen long enough to read before the next
-      // attempt's fillScreen wipes it (also acts as a backoff between retries).
+      // On failure, hold the error briefly so it's readable, then retry. Retries
+      // are fast now (WiFi stays up), so keep the pause short.
       if(!sendResult)
       {
         #ifdef DEBUG_VERBOSE
@@ -768,10 +789,13 @@ void SendFile(char* fileNameToSend)
         Serial.print(" failed: ");
         Serial.println(statusStr);
         #endif
-        delay(3000);
+        delay(1000);
       }
       attemptCount++;
     }
+    // Done retrying (success or gave up): drop WiFi now.
+    ftpClient.keepWiFiAlive = false;
+    ftpClient.FTPDisconnect();
     deviceState = DISPLAY_MENU;
 
     #ifdef DEBUG_VERBOSE

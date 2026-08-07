@@ -4,10 +4,11 @@
 #include <SD.h>
 
 
-static bool WriteAllToFTPClient(WiFiClient& client, const uint8_t* buffer, size_t length, unsigned long timeoutMs = 10000)
+static bool WriteAllToFTPClient(WiFiClient& client, const uint8_t* buffer, size_t length, bool* stalled = nullptr, unsigned long timeoutMs = 10000)
 {
     size_t totalWritten = 0;
     unsigned long start = millis();
+    if (stalled) *stalled = false;
 
     while (totalWritten < length)
     {
@@ -19,12 +20,14 @@ static bool WriteAllToFTPClient(WiFiClient& client, const uint8_t* buffer, size_
         }
         else
         {
-            // write() returned 0: NINA send buffer momentarily full, or the
-            // socket is gone. Only bail if it is really gone or we have stalled
-            // past the timeout - a transient blip must not abort (and truncate)
-            // the transfer. connected() is checked here (not every iteration)
-            // because it costs an SPI round-trip and can close a socket that is
-            // briefly in a transitional TCP state.
+            // write() returned 0: NINA send buffer full (the peer isn't draining
+            // fast enough) or the socket is gone. Report the backpressure so the
+            // caller can pace down. Only bail if the socket is really gone or we
+            // have stalled past the timeout - a transient blip must not abort
+            // (and truncate) the transfer. connected() is checked here (not every
+            // iteration) because it costs an SPI round-trip and can close a
+            // socket that is briefly in a transitional TCP state.
+            if (stalled) *stalled = true;
             if (!client.connected())
             {
                 Serial.println("ERROR: data connection dropped mid-write");
@@ -310,6 +313,10 @@ void FTPClient::FTPDisconnect() {
         dataClient.stop();
     }
     Serial.println("FTP connection closed");
+    if (keepWiFiAlive)
+    {
+        return;  // leave WiFi up so the next retry reuses it
+    }
     WiFi.disconnect();
     Serial.println("WiFi connection closed");
 }
@@ -677,20 +684,52 @@ bool FTPClient::UploadFileFromSDtoFTPServer(const char* remoteFile, const char* 
     size_t bytesRead;
     unsigned long lastProgress = millis();
     unsigned long uploadStart = millis();
+    unsigned long lastStallLog = 0;
+    unsigned long pacingMs = FTP_CHUNK_PACING_MS;  // adaptive; grows when the peer stalls
 
     while ((bytesRead = localFile.read(buffer, FTP_CHUNK_SIZE)) > 0)
     {
-        if (!WriteAllToFTPClient(dataClient, buffer, bytesRead))
+        bool stalled = false;
+        if (!WriteAllToFTPClient(dataClient, buffer, bytesRead, &stalled))
         {
-            // Link likely dropped mid-transfer (car rolled out of range).
-            Serial.println("ERROR: Failed to write to FTP server");
-            sprintf(returnMessage, "ERROR: Failed to write to FTP server");
+            // Link dropped mid-transfer (car out of range, or a marginal peer).
+            Serial.print("ERROR: write failed at ");
+            Serial.print(sent);
+            Serial.print(" of ");
+            Serial.print(fileSize);
+            Serial.print(" bytes (pace ");
+            Serial.print(pacingMs);
+            Serial.println("ms)");
+            sprintf(returnMessage, "ERROR: write failed at %u/%u bytes",
+                    (unsigned)sent, (unsigned)fileSize);
             localFile.close();
             dataClient.stop();
             FTPDisconnect();
             return false;
         }
         sent += bytesRead;
+
+        // Adaptive pacing: back off when the send buffer stalled (peer not
+        // draining), recover toward the base rate on clean chunks. Keeps healthy
+        // links fast while letting a marginal receiver keep up.
+        if (stalled)
+        {
+            pacingMs += FTP_PACING_STEP;
+            if (pacingMs > FTP_PACING_MAX) pacingMs = FTP_PACING_MAX;
+            if (millis() - lastStallLog >= 250)  // don't spam if every chunk stalls
+            {
+                Serial.print("Send stall at ");
+                Serial.print(sent);
+                Serial.print(" bytes, pace -> ");
+                Serial.print(pacingMs);
+                Serial.println("ms");
+                lastStallLog = millis();
+            }
+        }
+        else if (pacingMs > FTP_CHUNK_PACING_MS)
+        {
+            pacingMs--;
+        }
 
         if (millis() - lastProgress >= 500) {
             Serial.print("Upload progress: ");
@@ -699,12 +738,13 @@ bool FTPClient::UploadFileFromSDtoFTPServer(const char* remoteFile, const char* 
             Serial.print(sent);
             Serial.print("/");
             Serial.print(fileSize);
-            Serial.println(" bytes)");
+            Serial.print(" bytes, pace ");
+            Serial.print(pacingMs);
+            Serial.println("ms)");
+            if (progressCallback) progressCallback(sent, fileSize);
             lastProgress = millis();
         }
-        // Pace writes so the ESP32's TCP buffer can't build a huge backlog that
-        // stop() would then discard (see FTP_CHUNK_PACING_MS in the header).
-        delay(FTP_CHUNK_PACING_MS);
+        delay(pacingMs);
     }
 
     localFile.close();

@@ -16,6 +16,15 @@ class FTPClient {
 public:
     static constexpr uint16_t DEFAULT_FTP_PORT = 21;
     int ftpListenerPort = 21;
+    // When true, FTPDisconnect() closes the FTP sockets but leaves WiFi
+    // associated. The retry loop sets this so repeated attempts within one send
+    // reuse the WiFi link (re-associating per attempt is the slow part) and only
+    // drop WiFi once, after the send finishes.
+    bool keepWiFiAlive = false;
+    // Optional progress hook, called during an upload (~2 Hz) with bytes sent
+    // and total. Lets the caller draw progress (e.g. to a TFT) without this
+    // class knowing about the display. Left null = no callback.
+    void (*progressCallback)(size_t sent, size_t total) = nullptr;
     // Speed tuning result (measured on the AirLift over SPI):
     //   - 512 B chunks fail with a partial send regardless of pacing -> the
     //     nina-fw has a practical ~256 B per-sendData ceiling. Keep chunk = 256.
@@ -34,8 +43,15 @@ public:
     // writes so the module's TCP buffer can't build a huge backlog, and let the
     // tail drain before closing the data socket - otherwise STOR closes early
     // and the server records a truncated file (still replying 226).
-    static constexpr unsigned long FTP_CHUNK_PACING_MS = 10;
+    static constexpr unsigned long FTP_CHUNK_PACING_MS = 10;   // base (fast, healthy link)
     static constexpr unsigned long FTP_DRAIN_MS = 400;
+    // Adaptive pacing: when a chunk hits send-buffer backpressure (a marginal
+    // receiver, e.g. a power-saving Android host bridged through the hotspot),
+    // slow down by FTP_PACING_STEP up to FTP_PACING_MAX so the buffer doesn't
+    // overrun; recover toward the base rate on clean chunks. Healthy links
+    // (FileZilla/GoFTP) never stall, so they stay at the base 10 ms.
+    static constexpr unsigned long FTP_PACING_STEP = 5;
+    static constexpr unsigned long FTP_PACING_MAX  = 40;
 
     /*
      * @brief Connect to FTP server with given credentials
