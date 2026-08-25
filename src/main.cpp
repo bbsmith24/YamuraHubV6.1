@@ -105,17 +105,22 @@ void setup()
     // draw live upload progress on the TFT during sends
     ftpClient.progressCallback = UploadProgressTFT;
     /// Define main menu choices
+    sprintf(outStr, "Send Last File (%s)", sendLogFileName);
     TFTMenu::MenuChoice mainMenuChoices[6];
-    mainMenuChoices[0].description = "Start Logging";
+    sprintf(outStr, "Start Logging (%s)", currentDriver);
+    mainMenuChoices[0].description = outStr;
     mainMenuChoices[0].result = START_LOGGING;
-    mainMenuChoices[1].description = "Select Driver";
-    mainMenuChoices[1].result = SELECT_DRIVER;
-    mainMenuChoices[2].description = "Send File";
-    mainMenuChoices[2].result = SEND_FILE;
-    mainMenuChoices[3].description = "Get File";
-    mainMenuChoices[3].result = GET_FILE;
-    mainMenuChoices[4].description = "Settings";
-    mainMenuChoices[4].result = CHANGE_SETTINGS;
+    sprintf(outStr, "Send Last File (%s)", sendLogFileName);
+    mainMenuChoices[1].description = outStr;
+    mainMenuChoices[1].result = SEND_LAST_FILE;
+    mainMenuChoices[2].description = currentDriver + String(" (current selected)");  // selected driver name from config.ini
+    mainMenuChoices[2].result = SELECT_DRIVER;
+    mainMenuChoices[3].description = "Send File";
+    mainMenuChoices[3].result = SEND_FILE;
+    mainMenuChoices[4].description = "Get File";
+    mainMenuChoices[4].result = GET_FILE;
+    mainMenuChoices[5].description = "Settings";
+    mainMenuChoices[5].result = CHANGE_SETTINGS;
 
     // Wait for Serial connection
     unsigned long startTime = millis();
@@ -439,6 +444,7 @@ void loop()
   Serial.print("loop() current deviceState: ");
   Serial.println(deviceState);
   #endif
+  sprintf(outStr, "Send Last File (%s)", sendLogFileName);
   switch (deviceState)
   {
     case DISPLAY_MENU:
@@ -471,12 +477,14 @@ void loop()
       Serial.println("DeleteLogFiles() - deleting log files");  
       root = SD.open("/");
       DeleteLogFiles(root);
+      sendLogFileName[0] = '-';  // reset to no file
       deviceState = DISPLAY_MENU;
       break;
     case DELETE_ALL_FILES:
       Serial.println("DeleteAllFiles() - deleting all files");  
       root = SD.open("/");
       DeleteAllFiles(root);
+      sendLogFileName[0] = '-';  // reset to no file
       deviceState = DISPLAY_MENU;
       break;
     case LIST_FILES:
@@ -503,26 +511,27 @@ void MainMenu()
     #ifdef DEBUG_EXTRA_VERBOSE
     Serial.println("MainMenu() - displaying main menu");
     #endif
-    sprintf(outStr, "Send Last File (%s)", sendLogFileName);
-    int menuCount = 6;
+    int menuCount = 5;
     TFTMenu::MenuChoice mainMenuChoices[6];
-    mainMenuChoices[0].description = "Start Logging";
+    sprintf(outStr, "Start Logging (%s)", currentDriver);
+    mainMenuChoices[0].description = outStr;
     mainMenuChoices[0].result = START_LOGGING;
     //
+    sprintf(outStr, "Send Last File (%s)", sendLogFileName);
     mainMenuChoices[1].description = outStr;
     mainMenuChoices[1].result = SEND_LAST_FILE;
     //
-    mainMenuChoices[2].description = "Select Driver";
-    mainMenuChoices[2].result = SELECT_DRIVER;
+    //mainMenuChoices[2].description = currentDriver + String(" (current selected)");  // selected driver name from config.ini
+    //mainMenuChoices[2].result = SELECT_DRIVER;
     //
-    mainMenuChoices[3].description = "Send File";
-    mainMenuChoices[3].result = SEND_FILE;
+    mainMenuChoices[2].description = "Send File";
+    mainMenuChoices[2].result = SEND_FILE;
     //
-    mainMenuChoices[4].description = "Get File";
-    mainMenuChoices[4].result = GET_FILE;
+    mainMenuChoices[3].description = "Get File";
+    mainMenuChoices[3].result = GET_FILE;
     //
-    mainMenuChoices[5].description = "Settings";
-    mainMenuChoices[5].result = CHANGE_SETTINGS;
+    mainMenuChoices[4].description = "Settings";
+    mainMenuChoices[4].result = CHANGE_SETTINGS;
     deviceState = tftMenu.MenuSelect(12, mainMenuChoices, menuCount, START_LOGGING);
 }
 //
@@ -660,7 +669,7 @@ void StartLogging()
     deviceState = DISPLAY_MENU;
 
     #ifdef DEBUG_VERBOSE
-    Serial.println("Restart heartbeat timer in StartLogging");
+    Serial.println("Restart heartbeat after logging");
     #endif
     timer.begin(SendHeartbeat, TIMER_1HZ);  // restart heartbeat after logging ends
 }
@@ -799,7 +808,7 @@ void SendFile(char* fileNameToSend)
     deviceState = DISPLAY_MENU;
 
     #ifdef DEBUG_VERBOSE
-    Serial.println("Restart heartbeat timer in SendFileMenu");
+    Serial.println("Restart heartbeat timer after sending file");
     #endif
     timer.begin(SendHeartbeat, TIMER_1HZ);  // restart heartbeat after file send
 }
@@ -912,7 +921,7 @@ void GetFileMenu()
     deviceState = DISPLAY_MENU;
 
     #ifdef DEBUG_VERBOSE
-    Serial.println("Restart heartbeat timer in GetFileMenu");
+    Serial.println("Restart heartbeat timer after file get");
     #endif
     timer.begin(SendHeartbeat, TIMER_1HZ);  // restart heartbeat after file get
 }
@@ -924,21 +933,23 @@ void ChangeSettingsMenu()
     #ifdef DEBUG_EXTRA_VERBOSE
     Serial.println("ChangeSettingsMenu() - displaying settings menu");
     #endif
-    int menuCount = 6;
-    TFTMenu::MenuChoice settingsMenuChoices[6];
-    settingsMenuChoices[0].description = "Delete log files";
-    settingsMenuChoices[0].result = DELETE_LOG_FILES;
-    settingsMenuChoices[1].description = "Delete all files";
-    settingsMenuChoices[1].result = DELETE_ALL_FILES;
-    settingsMenuChoices[2].description = "List files";
-    settingsMenuChoices[2].result = LIST_FILES;
-    settingsMenuChoices[3].description = "FTP Port";
-    settingsMenuChoices[3].result = SELECT_FTP_PORT;
-    settingsMenuChoices[4].description = "Debug display";
-    settingsMenuChoices[4].result = SELECT_DEBUG;
-    settingsMenuChoices[5].description = "Exit";
-    settingsMenuChoices[5].result = DISPLAY_MENU;
-    deviceState = tftMenu.MenuSelect(12, settingsMenuChoices, menuCount, DELETE_LOG_FILES);
+    int menuCount = 7;
+    TFTMenu::MenuChoice settingsMenuChoices[7];
+    settingsMenuChoices[0].description = currentDriver + String(" (current selected)");  // selected driver name from config.ini
+    settingsMenuChoices[0].result = SELECT_DRIVER;
+    settingsMenuChoices[1].description = "Delete log files";
+    settingsMenuChoices[1].result = DELETE_LOG_FILES;
+    settingsMenuChoices[2].description = "Delete all files";
+    settingsMenuChoices[2].result = DELETE_ALL_FILES;
+    settingsMenuChoices[3].description = "List files";
+    settingsMenuChoices[3].result = LIST_FILES;
+    settingsMenuChoices[4].description = "FTP Port";
+    settingsMenuChoices[4].result = SELECT_FTP_PORT;
+    settingsMenuChoices[5].description = "Debug display";
+    settingsMenuChoices[5].result = SELECT_DEBUG;
+    settingsMenuChoices[6].description = "Exit";
+    settingsMenuChoices[6].result = DISPLAY_MENU;
+    deviceState = tftMenu.MenuSelect(12, settingsMenuChoices, menuCount, SELECT_DRIVER);
     #ifdef DEBUG_EXTRA_VERBOSE
     Serial.print("ChangeSettingsMenu() - selected menu item: ");
     Serial.println(deviceState); 
@@ -1456,21 +1467,35 @@ void DeleteAllFiles(File dir)
     String fileName = entry.name();
     if (entry.isDirectory()) 
     {
+      #ifdef DEBUG_VERBOSE
       Serial.print("DIR (skip) : ");
       Serial.println(entry.name());
+      #endif
       continue;
     } 
+    else if (fileName.endsWith(".ini"))  // don't delete config.ini
+    {
+      #ifdef DEBUG_VERBOSE
+      Serial.print(fileName);
+      Serial.println(" (skip config file)");
+      #endif
+      continue;
+    }
     else
     {
+      #ifdef DEBUG_VERBOSE
       Serial.print("DELETE FILE: "); 
       Serial.println(fileName);
+      #endif
       SD.remove(entry.name());
     }
     entry.close();
   }
+  #ifdef DEBUG_VERBOSE
   Serial.println("===== remaining files =====");
   dir.rewindDirectory();
   ListFiles(dir);
+  #endif
 }
 //
 //

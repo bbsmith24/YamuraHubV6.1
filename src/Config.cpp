@@ -15,7 +15,7 @@ long UTC_OFFSET_SECONDS       = 0;
 
 char driverNames[CFG_MAX_DRIVERS][CFG_DRIVER_LEN];
 int  driverCount = 0;
-char currentDriver[CFG_DRIVER_LEN] = "";
+char currentDriver[CFG_DRIVER_LEN] = "Select driver";  // default if no config.ini or no [selected driver] section
 
 static void copyVal(char* dest, size_t destLen, const String& val)
 {
@@ -56,6 +56,16 @@ static void ApplyConfigLine(const String& line, char* section, size_t sectionLen
         {
             Serial.println("Config: driver list full, ignoring extra entries");
         }
+        return;
+    }
+    // In [selected driver], next line is index of current driver name
+    if (strcmp(section, "selected driver") == 0)
+    {
+        strncpy(currentDriver, line.c_str(), CFG_DRIVER_LEN - 1);
+        #ifdef DEBUG_VERBOSE
+        Serial.print("Config: selected driver ");
+        Serial.println(currentDriver);
+        #endif
         return;
     }
 
@@ -152,6 +162,8 @@ bool LoadConfigFromSD(const char* path)
     Serial.print(", ");
     Serial.print(driverCount);
     Serial.println(" driver(s))");
+    Serial.print("current driver ");
+    Serial.println(currentDriver);
     return true;
 }
 
