@@ -58,17 +58,7 @@ static void ApplyConfigLine(const String& line, char* section, size_t sectionLen
         }
         return;
     }
-    // In [selected driver], next line is index of current driver name
-    if (strcmp(section, "selected driver") == 0)
-    {
-        strncpy(currentDriver, line.c_str(), CFG_DRIVER_LEN - 1);
-        #ifdef DEBUG_VERBOSE
-        Serial.print("Config: selected driver ");
-        Serial.println(currentDriver);
-        #endif
-        return;
-    }
-
+ 
     // Everything else is key=value.
     int eq = line.indexOf('=');
     if (eq <= 0)
@@ -105,6 +95,18 @@ static void ApplyConfigLine(const String& line, char* section, size_t sectionLen
     {
         // utc_offset is in hours (may be fractional, e.g. 5.5); store as seconds
         if (key == "utc_offset") UTC_OFFSET_SECONDS = (long)(val.toFloat() * 3600.0);
+    }
+    // In [selected driver], next line is index of current driver name
+    else if (strcmp(section, "selected driver") == 0)
+    {
+        if (key == "driver")
+        {
+            strncpy(currentDriver, val.c_str(), CFG_DRIVER_LEN - 1);
+            #ifdef DEBUG_VERBOSE
+            Serial.print("Config: selected driver ");
+            Serial.println(currentDriver);
+            #endif
+        }
     }
 }
 
@@ -300,3 +302,9 @@ bool SaveFtpPortToConfig(const char* path, int port)
     snprintf(portStr, sizeof(portStr), "%d", port);
     return SetConfigValue(path, "ftp", "port", portStr);
 }
+bool SaveSelectedDriverToConfig(const char* path, char* driver)
+{
+    strcpy(currentDriver, driver);
+    return SetConfigValue(path, "selected driver", "driver", driver);
+}
+

@@ -11,8 +11,8 @@
 #include <TimeLib.h>
 
 // debug to serial levels
-//#define DEBUG_VERBOSE
-//#define DEBUG_EXTRA_VERBOSE
+#define DEBUG_VERBOSE
+#define DEBUG_EXTRA_VERBOSE
 
 // WiFi SPI pin configuration for Teensy 4.1 with WiFiNINA shield
 #define WIFI_SPI_MOSI_PIN  11  // SPI MOSI used by WiFi module

@@ -573,7 +573,7 @@ void SelectDriverMenu()
     Serial.print("Selected driver: ");
     Serial.println(currentDriver);
     #endif
-
+    SaveSelectedDriverToConfig("/config.ini", currentDriver);
     deviceState = DISPLAY_MENU;
 }
 //

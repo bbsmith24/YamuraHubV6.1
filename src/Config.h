@@ -68,5 +68,8 @@ bool LoadConfigFromSD(const char* path);
 // needed and preserving all other lines (including comments). Also updates the
 // in-memory FTP_PORT. Returns true on success.
 bool SaveFtpPortToConfig(const char* path, int port);
-
+// Persist the selected driver back to config.ini, creating the file/[selected driver] section if
+// needed and preserving all other lines (including comments). Also updates the
+// in-memory currentDriver. Returns true on success.
+bool SaveSelectedDriverToConfig(const char* path, char* driver);
 #endif // CONFIG_H
