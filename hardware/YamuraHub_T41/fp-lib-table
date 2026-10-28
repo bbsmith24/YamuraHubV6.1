@@ -1,0 +1,4 @@
+(fp_lib_table
+  (version 7)
+  (lib (name "YamuraHub")(type "KiCad")(uri "${KIPRJMOD}/YamuraHub.pretty")(options "")(descr "YamuraLog Hub project footprints"))
+)

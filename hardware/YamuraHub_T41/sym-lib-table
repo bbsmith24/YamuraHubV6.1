@@ -1,0 +1,4 @@
+(sym_lib_table
+  (version 7)
+  (lib (name "YamuraHub")(type "KiCad")(uri "${KIPRJMOD}/YamuraHub.kicad_sym")(options "")(descr "YamuraLog Hub project symbols"))
+)
