@@ -22,12 +22,13 @@
 #define ESP32_RESETN        6  // Airlift reset pin on Teensy
 #define SPIWIFI_ACK         9  // Airlift busy/IRQ pin on Teensy
 #define ESP32_GPIO0        -1  // GPIO0 pin not used in this wiring
-#define SD_CS               3  // SD card CS pin
+// SD card: Teensy 4.1 built-in microSD slot (4-bit SDIO, SD.begin(BUILTIN_SDCARD)) -
+// no chip select, and the display's own SD slot is not used. Pin 3 is now free.
 
-// TFT display pin configuration for Teensy 4.0 with ST7735 display
-#define TFT_MOSI 11   // and microSD MOSI
-#define TFT_MISO 12   // and microSD MISO
-#define TFT_SCLK 13   // and microSD SCLK
+// TFT display pin configuration for Teensy 4.1 (SPI shared with the AirLift)
+#define TFT_MOSI 11
+#define TFT_MISO 12
+#define TFT_SCLK 13
 #define TFT_CS   15   // TFT chip select control pin
 #define TFT_DC    2   // Data Command control pin
 #define TFT_RST   4   // Reset pin (could connect to RST pin)

@@ -2,7 +2,7 @@
 Control for YamuraLog sensor network. Start/Stop logging, save log file to microSD, handle FTP communications with data viewer
 
 ## Hardware
-- Teensy 4.0 (could also run on a Teensy 4.1 and use internal micorSD card)
+- Teensy 4.1. Log files go to its built-in microSD slot (4-bit SDIO, `SD.begin(BUILTIN_SDCARD)`), not the display's SD slot.
 - Waveshare SN65HVD230 CAN tranciever
 - Hosyond 4" 320x480 display (with built in microSD card slot)
 - Adafruit Airlift
@@ -29,7 +29,7 @@ Install these libraries:
    - `FTP_PASS`
    - 'FTP_PATH'
 4. Adjust pin definitions in main.h as needed:
-5. Build and upload to Teensy 4.0.
+5. Build and upload to Teensy 4.1.
 6. For full debug messages, uncomment #define DEBUG_EXTRA_VERBOSE. Use #define DEBUG_VERBOSE for more serious(?) messages
 7. Open Serial Monitor at `115200` baud.
 
@@ -48,4 +48,4 @@ source. See `Config.h` for the format.
 
 ## PlatformIO
 
-A `platformio.ini` file is included for Teensy 4.0 builds.
+A `platformio.ini` file is included for Teensy 4.1 builds (`env:teensy41`).

@@ -1,6 +1,6 @@
 //
 // YamuraLog Hub
-// Teensy 4.0/CAN FD
+// Teensy 4.1/CAN FD
 // Brian B. Smith
 // Yamura Motors LLC
 // brianbsmith.com
@@ -175,10 +175,9 @@ void setup()
     Serial.println(TFT_RST);    
 
     Serial.println();
-    Serial.println("SD pins");
+    Serial.println("SD card");
     Serial.println("=======");
-    Serial.print("CS pin: ");
-    Serial.println(SD_CS);
+    Serial.println("Teensy 4.1 built-in microSD slot (SDIO)");
     Serial.println();
 
     Serial.println();
@@ -298,7 +297,7 @@ void setup()
     #ifdef DEBUG_VERBOSE
     Serial.print("Initializing SD card...");
     #endif
-    if (!SD.begin(SD_CS)) 
+    if (!SD.begin(BUILTIN_SDCARD))
     {
         #ifdef DEBUG_VERBOSE
         Serial.println(" FAILED");
