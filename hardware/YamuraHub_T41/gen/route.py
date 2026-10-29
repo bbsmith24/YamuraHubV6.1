@@ -222,10 +222,22 @@ def merge(edges):
     return segs
 
 t0 = time.time()
-for net in net_order():
-    route_net(net)
-    print(f"{net:14s} edges {len(routed[net][0]):4d} vias {len(routed[net][1]):2d}  ({time.time()-t0:.1f}s)", flush=True)
-print("FAILED:", failed)
+# sequential routing can box a late net in; on failure, rip everything up and route
+# again with the failed nets first (a few attempts)
+base_objs = len(objs)          # pads and holes only - everything after is routed copper
+order = net_order()
+for attempt in range(8):
+    del objs[base_objs:]; routed.clear(); failed.clear()
+    for net in order:
+        route_net(net)
+    if not failed:
+        break
+    bad = list(dict.fromkeys(n for n, _, _ in failed))
+    print(f"attempt {attempt + 1}: {bad} failed - rerouting with them first", flush=True)
+    order = bad + [n for n in order if n not in bad]
+for net in order:
+    print(f"{net:14s} edges {len(routed[net][0]):4d} vias {len(routed[net][1]):2d}", flush=True)
+print(f"routed in {time.time() - t0:.1f}s; FAILED:", failed)
 
 # ---------------------------------------------------------------- write to board
 for t in list(board.GetTracks()): board.Remove(t)
@@ -239,12 +251,21 @@ for net, (edges, vias, w) in routed.items():
     for (i, j) in vias:
         vv = pcbnew.PCB_VIA(board); vv.SetPosition(pcbnew.VECTOR2I(MM(i * G), MM(j * G)))
         vv.SetDrill(MM(VIA_DRILL)); vv.SetWidth(MM(VIA_D)); vv.SetNet(netinfo[net]); board.Add(vv)
-    # stub from on-grid track end to off-grid pad centres so the end lands mid-pad
+    # stub from on-grid track end to off-grid pad centres so the end lands mid-pad. Only
+    # real segment endpoints (a stub from mid-segment counts as dangling in KiCad), and only
+    # the endpoint nearest the pad centre on each layer.
+    seg_ends = {c for seg in merge(edges) for c in seg}
     for p in pads_by_net[net]:
         i, j = int(round(p.cx / G)), int(round(p.cy / G))
         if abs(i * G - p.cx) < 1e-3 and abs(j * G - p.cy) < 1e-3: continue
-        ends = [c for e in edges for c in e if p.layers and abs(c[1] * G - p.cx) <= p.hw and abs(c[2] * G - p.cy) <= p.hh]
-        for (l, ci, cj) in set(ends):
+        nearest = {}
+        for c in seg_ends:
+            if p.layers and abs(c[1] * G - p.cx) <= p.hw and abs(c[2] * G - p.cy) <= p.hh:
+                d = math.hypot(c[1] * G - p.cx, c[2] * G - p.cy)
+                if c[0] not in nearest or d < nearest[c[0]][0]:
+                    nearest[c[0]] = (d, c)
+        for d, (l, ci, cj) in nearest.values():
+            if d < 1e-3: continue
             t = pcbnew.PCB_TRACK(board)
             t.SetStart(pcbnew.VECTOR2I(MM(ci * G), MM(cj * G))); t.SetEnd(pcbnew.VECTOR2I(MM(p.cx), MM(p.cy)))
             t.SetWidth(MM(min(w, 2 * min(p.hw, p.hh) - 0.2))); t.SetLayer(LAY[l]); t.SetNet(netinfo[net]); board.Add(t)

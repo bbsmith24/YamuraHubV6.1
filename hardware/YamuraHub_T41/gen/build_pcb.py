@@ -68,10 +68,19 @@ def load_fp(spec):
 def text(board, s, x, y, size=1.2, layer=pcbnew.F_SilkS, angle=0, just=pcbnew.GR_TEXT_H_ALIGN_CENTER):
     t = pcbnew.PCB_TEXT(board); t.SetText(s); t.SetLayer(layer)
     t.SetPosition(V(x, y)); t.SetTextSize(V(size, size)); t.SetTextThickness(MM(size * 0.15))
+    if layer in (pcbnew.B_SilkS, pcbnew.B_Fab):
+        # mirrored text runs the other way, so swap left/right justification to keep the
+        # text on the same side of its anchor as on the front
+        t.SetMirrored(True)
+        just = {pcbnew.GR_TEXT_H_ALIGN_LEFT: pcbnew.GR_TEXT_H_ALIGN_RIGHT,
+                pcbnew.GR_TEXT_H_ALIGN_RIGHT: pcbnew.GR_TEXT_H_ALIGN_LEFT}.get(just, just)
     t.SetHorizJustify(just)
     if angle: t.SetTextAngle(pcbnew.EDA_ANGLE(angle, pcbnew.DEGREES_T))
-    if layer == pcbnew.B_SilkS: t.SetMirrored(True)
     board.Add(t)
+
+def silk(p):
+    """Silkscreen layer for a part's labels: the side it is mounted on."""
+    return pcbnew.B_SilkS if p.get("side") == "B" else pcbnew.F_SilkS
 
 def main():
     make_teensy41()
@@ -110,13 +119,15 @@ def main():
     for a, b in (((0, 0), (W, 0)), ((W, 0), (W, H)), ((W, H), (0, H)), ((0, H), (0, 0))):
         s = pcbnew.PCB_SHAPE(board); s.SetShape(pcbnew.SHAPE_T_SEGMENT)
         s.SetStart(V(*a)); s.SetEnd(V(*b)); s.SetLayer(pcbnew.Edge_Cuts); s.SetWidth(MM(0.1)); board.Add(s)
-    # footprints
+    # footprints; side "B" parts are flipped to the back (mirrored in x about their origin)
     for p in D.PARTS:
         fp = load_fp(p["fp"])
         fp.SetReference(p["ref"]); fp.SetValue(p["value"])
         fp.SetPosition(V(*p["pos"]))
         if p["rot"]: fp.SetOrientationDegrees(p["rot"])
         board.Add(fp)
+        if p.get("side") == "B":
+            fp.Flip(fp.GetPosition(), pcbnew.FLIP_DIRECTION_LEFT_RIGHT)
         for pad in fp.Pads():
             n = padnet.get((p["ref"], pad.GetNumber()))
             if n: pad.SetNet(nets[n])
@@ -126,34 +137,49 @@ def main():
         if "ref_pos" in p:
             fp.Reference().SetPosition(V(*p["ref_pos"])); fp.Reference().SetTextAngle(pcbnew.EDA_ANGLE(0, pcbnew.DEGREES_T))
         for s_, x_, y_ in p.get("silk", []):
-            text(board, s_, x_, y_, 0.8)
-    # silkscreen pin labels for modules / headers
+            text(board, s_, x_, y_, 0.8, layer=silk(p))
+    # silkscreen pin labels for modules / headers, on the side the part is mounted
     def label_pads(p):
         fp = board.FindFootprintByReference(p["ref"])
         pads = [pd for pd in fp.Pads() if pd.GetNumber().isdigit()]
         xs = {round(pd.GetPosition().x / 1e6, 2) for pd in pads}
         horiz = len(xs) > 1
         side = p.get("label_side", "below")
+        layer = silk(p)
         for pd in pads:
             i = int(pd.GetNumber()) - 1
             if i >= len(p["pinnames"]): continue
             x, y = pd.GetPosition().x / 1e6, pd.GetPosition().y / 1e6
             r = max(pd.GetSize().x, pd.GetSize().y) / 2e6 + 0.75
-            if horiz and side == "below":   # text reads upward, ends just below the pad
-                text(board, p["pinnames"][i], x, y + r, 0.8, angle=90, just=pcbnew.GR_TEXT_H_ALIGN_RIGHT)
+            if horiz and side == "below":   # text runs up the board, ending just below the pad
+                text(board, p["pinnames"][i], x, y + r, 0.8, layer, 90, pcbnew.GR_TEXT_H_ALIGN_RIGHT)
             elif horiz:                       # above: starts just above the pad
-                text(board, p["pinnames"][i], x, y - r, 0.8, angle=90, just=pcbnew.GR_TEXT_H_ALIGN_LEFT)
+                text(board, p["pinnames"][i], x, y - r, 0.8, layer, 90, pcbnew.GR_TEXT_H_ALIGN_LEFT)
+            elif side == "right":             # vertical header: text to the right
+                text(board, p["pinnames"][i], x + r, y, 0.8, layer, 0, pcbnew.GR_TEXT_H_ALIGN_LEFT)
             else:                             # vertical header: text to the left
-                text(board, p["pinnames"][i], x - r, y, 0.8, just=pcbnew.GR_TEXT_H_ALIGN_RIGHT)
+                text(board, p["pinnames"][i], x - r, y, 0.8, layer, 0, pcbnew.GR_TEXT_H_ALIGN_RIGHT)
     for p in D.PARTS:
         if "pinnames" in p and p["ref"] != "A1":
             label_pads(p)
-    text(board, D.TITLE + "  rev " + D.REV, 75, 50.8, 1.5)
-    text(board, "AirLift module sits here", 75.5, 30, 1.0, layer=pcbnew.F_Fab)
-    text(board, "CAN board (A3) sits here", 58, 56, 1.0, layer=pcbnew.F_Fab)
-    text(board, "Wire A3 CANH/CANL to J2", 34.3, 48.0, 0.8)
-    text(board, "JP1 open: display SDO not on MISO", 31.5, 13.97, 0.8, just=pcbnew.GR_TEXT_H_ALIGN_LEFT)
-    text(board, "Cut Teensy VUSB-VIN pad", 105, 10.0, 0.8)
+    # front: the display covers almost the whole face - show its outline and mounting holes
+    x0, y0 = D.DISP_X0, D.DISP_Y0
+    x1, y1 = x0 + D.DISP_W, y0 + D.DISP_H
+    for a, b in (((x0, y0), (x1, y0)), ((x1, y0), (x1, y1)), ((x1, y1), (x0, y1)), ((x0, y1), (x0, y0))):
+        s = pcbnew.PCB_SHAPE(board); s.SetShape(pcbnew.SHAPE_T_SEGMENT)
+        s.SetStart(V(*a)); s.SetEnd(V(*b)); s.SetLayer(pcbnew.F_SilkS); s.SetWidth(MM(0.15)); board.Add(s)
+    # keep clear of through-hole pads (they show on both sides): rows y 26-33, x 25-80
+    text(board, "DISPLAY MSP4030/4031 - plugs into J4", 52.0, 26.5, 1.5)
+    text(board, "M3 standoffs at H5-H8, header end over J4", 52.0, 29.7, 1.0)
+    text(board, D.TITLE + " rev " + D.REV + ": front = display only", 52.0, 32.2, 1.0)
+    # back: title and assembly notes (mirrored so they read correctly from the back)
+    B = pcbnew.B_SilkS
+    text(board, D.TITLE + "  rev " + D.REV, 30.0, 43.2, 1.2, B)
+    text(board, "AirLift module sits here", 67.0, 22.0, 1.0, pcbnew.B_Fab)
+    text(board, "CAN board (A3) sits here", 30.0, 33.0, 1.0, pcbnew.B_Fab)
+    text(board, "Wire A3 CANH/CANL to J2", 30.0, 47.5, 0.8, B)
+    text(board, "JP1 open: display SDO not on MISO", 42.5, 14.6, 0.8, B)
+    text(board, "Cut Teensy VUSB-VIN pad", 99.06, 66.7, 0.8, B)
     pcbnew.SaveBoard(PCB, board)
     print("saved", PCB)
 

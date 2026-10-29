@@ -129,13 +129,13 @@ def build_local_lib():
 # ------------------------------------------------------------------ placement on the sheet (A3, mm)
 SCH_POS = {
     "A1": (200.66, 139.7), "A2": (309.88, 63.5), "A3": (309.88, 116.84), "J2": (309.88, 142.24),
-    "J3": (365.76, 139.7), "J4": (66.04, 63.5), "JP1": (66.04, 116.84),
+    "J3": (365.76, 132.08), "J8": (365.76, 177.8), "J4": (66.04, 63.5), "JP1": (66.04, 116.84),
     "J1": (30.48, 208.28), "D1": (63.5, 205.74), "D4": (81.28, 226.06), "F1": (101.6, 190.5),
     "C1": (101.6, 226.06), "U1": (132.08, 205.74), "C2": (157.48, 226.06), "C3": (177.8, 226.06),
     "J5": (309.88, 185.42), "J6": (309.88, 210.82), "J7": (309.88, 236.22),
-    "SW1": (40.64, 254.0), "SW2": (66.04, 254.0), "SW3": (91.44, 254.0),
-    "R1": (226.06, 210.82), "R2": (254.0, 210.82), "D2": (226.06, 236.22), "D3": (254.0, 236.22),
-    "H1": (360.68, 251.46), "H2": (370.84, 251.46), "H3": (381.0, 251.46), "H4": (391.16, 251.46),
+    "R1": (226.06, 210.82), "R2": (254.0, 210.82),
+    "H1": (350.52, 251.46), "H2": (360.68, 251.46), "H3": (370.84, 251.46), "H4": (381.0, 251.46),
+    "H5": (350.52, 264.16), "H6": (360.68, 264.16), "H7": (370.84, 264.16), "H8": (381.0, 264.16),
 }
 LABEL_ANG = {0: 180, 180: 0, 90: 270, 270: 90}
 
@@ -197,7 +197,7 @@ def main():
     # notes
     notes = [
         (25.4, 274.32, "Pin map from YamuraHubV6.1 src/main.h. SD card: Teensy 4.1 built-in slot (SD.begin(BUILTIN_SDCARD)); display SD_CS not connected."),
-        (25.4, 279.4, "JP1 open by default: ST7796 SDO does not tri-state and would contend with the AirLift on MISO. A3 (Waveshare) includes a 120R terminator - hub is the bus end."),
+        (25.4, 279.4, "JP1 open by default: ST7796 SDO does not tri-state and would contend with the AirLift on MISO. A3 (Waveshare) has a fixed 120R terminator: remove it if both DB9s are used (hub mid-bus)."),
         (25.4, 284.48, "Teensy 4.1: cut the VUSB-VIN pad so USB and the 12V supply are not tied together. CAN = FlexCAN_T4FD<CAN3> on pins 30 (CRX3) / 31 (CTX3)."),
     ]
     for x, y, t in notes:
