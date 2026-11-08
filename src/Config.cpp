@@ -12,6 +12,7 @@ char FTP_PASS[CFG_STR_LEN]   = DEFAULT_FTP_PASS;
 char FTP_PATH[CFG_STR_LEN]   = DEFAULT_FTP_PATH;
 int  FTP_PORT                = DEFAULT_FTP_PORT;
 long UTC_OFFSET_SECONDS       = 0;
+uint32_t LOG_PREALLOC_MB      = CFG_DEFAULT_PREALLOC_MB;
 
 char driverNames[CFG_MAX_DRIVERS][CFG_DRIVER_LEN];
 int  driverCount = 0;
@@ -96,6 +97,16 @@ static void ApplyConfigLine(const String& line, char* section, size_t sectionLen
         // utc_offset is in hours (may be fractional, e.g. 5.5); store as seconds
         if (key == "utc_offset") UTC_OFFSET_SECONDS = (long)(val.toFloat() * 3600.0);
     }
+    else if (strcmp(section, "logging") == 0)
+    {
+        if (key == "prealloc_mb")
+        {
+            long mb = val.toInt();
+            if (mb < 0) mb = 0;
+            if (mb > CFG_MAX_PREALLOC_MB) mb = CFG_MAX_PREALLOC_MB;
+            LOG_PREALLOC_MB = (uint32_t)mb;
+        }
+    }
     // In [selected driver], next line is index of current driver name
     else if (strcmp(section, "selected driver") == 0)
     {
@@ -163,7 +174,9 @@ bool LoadConfigFromSD(const char* path)
     Serial.print(FTP_PORT);
     Serial.print(", ");
     Serial.print(driverCount);
-    Serial.println(" driver(s))");
+    Serial.print(" driver(s), log prealloc ");
+    Serial.print(LOG_PREALLOC_MB);
+    Serial.println(" MB)");
     Serial.print("current driver ");
     Serial.println(currentDriver);
     return true;

@@ -41,6 +41,7 @@
 
 #include "main.h"        // Contains pin definitions
 #include "Config.h"      // Effective WiFi/FTP settings + driver list (config.ini)
+#include "LogWriter.h"   // Buffered, pre-allocated log file writer
 
 // Global FTP client instance
 FTPClient ftpClient;
@@ -75,8 +76,6 @@ FlexCAN_T4FD<CAN3, RX_SIZE_256, TX_SIZE_16> canFD;  // can3 port
 // CAN       0001010 0000      (only one allowed) 0xA0
 #define CANID 0x010
 bool timeValid = false;
-
-File targetFile;
 ///
 ///
 ///
@@ -637,8 +636,11 @@ void StartLogging()
     tftDisplay.drawString(outStr, textPosition[0], textPosition[1], GFXFF);
     textPosition[1] += fontHeight;
     //
-    targetFile = SD.open(sendLogFileName, FILE_WRITE);
-    if (!targetFile || targetFile.isDirectory())
+    // Reserve LOG_PREALLOC_MB of contiguous space up front ([logging] prealloc_mb
+    // in config.ini) so the card doesn't allocate clusters mid-run.
+    bool preallocated = false;
+    uint64_t preallocBytes = (uint64_t)LOG_PREALLOC_MB * 1024ULL * 1024ULL;
+    if (!LogOpen(sendLogFileName, preallocBytes, &preallocated))
     {
         #ifdef DEBUG_VERBOSE
         Serial.printf("Failed to open file %s for writing\n", sendLogFileName);
@@ -649,14 +651,29 @@ void StartLogging()
         logData = false;
         return;
     }
+    if (preallocBytes == 0)
+    {
+        sprintf(outStr, "No pre-allocation");
+    }
+    else if (preallocated)
+    {
+        sprintf(outStr, "Pre-allocated %lu MB", (unsigned long)LOG_PREALLOC_MB);
+    }
+    else
+    {
+        sprintf(outStr, "Pre-alloc %lu MB FAILED", (unsigned long)LOG_PREALLOC_MB);
+    }
+    tftDisplay.drawString(outStr, textPosition[0], textPosition[1], GFXFF);
+    textPosition[1] += fontHeight;
     #ifdef DEBUG_VERBOSE
-    Serial.printf("Start logging to %s at %dms\n", sendLogFileName, millis());
+    Serial.printf("Start logging to %s at %dms (%s)\n", sendLogFileName, millis(), outStr);
     #endif
     logData = true;
     while (true)
     {
         canFD.events();
         currentMillis = millis();
+        LogService(currentMillis);   // periodic flush of buffered data to the card
         tftMenu.CheckButton(currentMillis, 0);
         if (tftMenu.buttons[0].buttonReleased)
         {
@@ -1063,8 +1080,8 @@ void CAN_A2DMessage(const CANFD_message_t &msg)
   {
     return;
   }
-  targetFile.write((const uint8_t)msg.id);
-  targetFile.write((const uint8_t *)adData.dataBuffer, AD_SIZE);
+  LogWriteByte((uint8_t)msg.id);
+  LogWrite(adData.dataBuffer, AD_SIZE);
 }
 //
 // Accelerometer node message
@@ -1086,8 +1103,8 @@ void CAN_AccelMessage(const CANFD_message_t &msg)
   {
     return;
   }
-  targetFile.write((const uint8_t)msg.id);
-  targetFile.write((const uint8_t *)imuData.dataBuffer, IMU_SIZE);
+  LogWriteByte((uint8_t)msg.id);
+  LogWrite(imuData.dataBuffer, IMU_SIZE);
 }
 //
 // GPS node message
@@ -1145,8 +1162,8 @@ void CAN_GPSMessage(const CANFD_message_t &msg)
     }
     return;
   }
-  targetFile.write((const uint8_t)msg.id);
-  targetFile.write((const uint8_t *)gpsData.dataBuffer, GPS_SIZE);
+  LogWriteByte((uint8_t)msg.id);
+  LogWrite(gpsData.dataBuffer, GPS_SIZE);
 }
 //
 // IR tire temp node message
@@ -1169,8 +1186,8 @@ void CAN_TireIRMessage(const CANFD_message_t &msg)
   {
     return;
   }
-  targetFile.write((const uint8_t)msg.id);
-  targetFile.write((const uint8_t *)irData.dataBuffer, IR_SIZE);
+  LogWriteByte((uint8_t)msg.id);
+  LogWrite(irData.dataBuffer, IR_SIZE);
 }
 //
 // Shock position message
@@ -1205,8 +1222,8 @@ void CAN_WheelSpeedMessage(const CANFD_message_t &msg)
   {
     return;
   }
-  targetFile.write((const uint8_t)msg.id);
-  targetFile.write((const uint8_t *)speedData.dataBuffer, SPEED_SIZE);
+  LogWriteByte((uint8_t)msg.id);
+  LogWrite(speedData.dataBuffer, SPEED_SIZE);
 }
 //
 // RPM message
@@ -1289,15 +1306,17 @@ int GetNextLogFileIdx()
 ///
 void StopLogging()
 {
-    // flush and close file
-    targetFile.flush();
-    targetFile.close();
+    // stop accepting data, write the buffer, truncate the pre-allocated file to
+    // its real length and close it
+    logData = false;
+    bool writeError = LogWriteError();
+    float sizeKB = (float)LogClose() / 1000.0;
     digitalWrite(RECORDING_LED, LOW);  // turn off recording LED
     sprintf(outStr, "Logging stopped");
     tftMenu.DrawString(outStr, tftMenu.textPosition[0], tftMenu.textPosition[1], GFXFF);
-    logData = false;
     #ifdef DEBUG_VERBOSE
-    Serial.printf("End logging  at %dms to file %s (%0.3f KB)\n", millis(), sendLogFileName, (float)targetFile.size() / 1000.0);
+    Serial.printf("End logging  at %dms to file %s (%0.3f KB)%s\n", millis(), sendLogFileName, sizeKB,
+                  writeError ? " - SD WRITE ERROR" : "");
     #endif
     tftDisplay.fillScreen((uint16_t)~TFT_RED);
     tftDisplay.setRotation(1);
@@ -1311,11 +1330,15 @@ void StopLogging()
     sprintf(outStr, "STOP LOGGING at %lu", millis());
     tftDisplay.drawString(outStr, textPosition[0], textPosition[1], GFXFF);
     textPosition[1] += fontHeight;
-    sprintf(outStr, "%s (%0.3f KB)", sendLogFileName, (float)targetFile.size() / 1000.0);
+    sprintf(outStr, "%s (%0.3f KB)", sendLogFileName, sizeKB);
     tftDisplay.drawString(outStr, textPosition[0], textPosition[1], GFXFF);
     textPosition[1] += fontHeight;
-    //
-    targetFile.close();
+    if (writeError)
+    {
+        sprintf(outStr, "SD WRITE ERROR - data lost");
+        tftDisplay.drawString(outStr, textPosition[0], textPosition[1], GFXFF);
+        textPosition[1] += fontHeight;
+    }
 
     delay(10000);  // wait 10 seconds before returning to menu
     //tftDisplay.drawString("Press any button to continue", textPosition[0], textPosition[1], GFXFF);

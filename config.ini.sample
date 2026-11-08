@@ -22,6 +22,14 @@ port=21
 [time]
 utc_offset=-4
 
+# Space reserved for each new log file before logging starts, in MB. The card
+# then never allocates clusters mid-run (avoids write stalls/dropped data); the
+# file is cut back to its real size when logging stops. Set it above your
+# longest session (rough guide: data rate x session length). 0 turns it off.
+# Max 4095 (FAT32 file limit). Default 64.
+[logging]
+prealloc_mb=64
+
 # One driver name per line. Shown in the Select Driver menu (max 24).
 [drivers]
 Pete

@@ -26,6 +26,9 @@
 //   [time]
 //   utc_offset=-4      ; local = UTC + offset, in hours (EDT -4, PST -8, IST 5.5)
 //
+//   [logging]
+//   prealloc_mb=64     ; log file space reserved up front, in MB (0 = off)
+//
 //   [drivers]
 //   Pete
 //   Aron
@@ -52,6 +55,15 @@ extern int  FTP_PORT;
 // UTC; this is added when setting the system clock so SD file timestamps are
 // local. Default 0. Set via [time] utc_offset (hours) in config.ini.
 extern long UTC_OFFSET_SECONDS;
+
+// Log file pre-allocation, in MB. Before logging starts this much contiguous
+// space is reserved for the new log file, so the SD card never has to allocate
+// clusters (FAT updates) mid-run; the file is truncated to the real length when
+// logging stops. 0 disables it. Capped at CFG_MAX_PREALLOC_MB (FAT32 4 GB file
+// limit). Set via [logging] prealloc_mb in config.ini.
+#define CFG_DEFAULT_PREALLOC_MB 64
+#define CFG_MAX_PREALLOC_MB     4095
+extern uint32_t LOG_PREALLOC_MB;
 
 // Driver list loaded from the [drivers] section, and the current selection.
 extern char driverNames[CFG_MAX_DRIVERS][CFG_DRIVER_LEN];
