@@ -30,8 +30,8 @@
 #define TFT_MISO 12
 #define TFT_SCLK 13
 #define TFT_CS   15   // TFT chip select control pin
-#define TFT_DC    2   // Data Command control pin
-#define TFT_RST   4   // Reset pin (could connect to RST pin)
+#define TFT_DC    2   // Data Command control pin (to RS pin)
+#define TFT_RST   4   // Reset pin (to RST pin)
 
 // Button pin definitions
 #define BUTTON_0 16
