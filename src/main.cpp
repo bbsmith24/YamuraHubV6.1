@@ -1088,7 +1088,31 @@ void CAN_A2DMessage(const CANFD_message_t &msg)
 //
 void CAN_AccelMessage(const CANFD_message_t &msg) 
 {
-  // copy data to buffer
+  // accel + gyro node: same id, longer message (CAN FD rounds 28 bytes up to 32 on the wire)
+  if (msg.len >= IMU_GYRO_SIZE)
+  {
+    memcpy(imuGyroData.dataBuffer, msg.buf, IMU_GYRO_SIZE);
+    #ifdef DEBUG_EXTRA_VERBOSE
+    sprintf(outStr, "%ld\t0x%02X\tIMU\t%0.4f\t%0.4f\t%0.4f\tGYRO\t%0.3f\t%0.3f\t%0.3f",
+            imuGyroData.dataStructure.timestamp,
+            (int)msg.id,
+            imuGyroData.dataStructure.accel[0],
+            imuGyroData.dataStructure.accel[1],
+            imuGyroData.dataStructure.accel[2],
+            imuGyroData.dataStructure.gyro[0],
+            imuGyroData.dataStructure.gyro[1],
+            imuGyroData.dataStructure.gyro[2]);
+    Serial.println(outStr);
+    #endif
+    if (!logData)
+    {
+      return;
+    }
+    LogWriteByte((uint8_t)IMU_GYRO_LOG_ID);
+    LogWrite(imuGyroData.dataBuffer, IMU_GYRO_SIZE);
+    return;
+  }
+  // accel-only node
   memcpy(imuData.dataBuffer, msg.buf, IMU_SIZE);
   #ifdef DEBUG_EXTRA_VERBOSE
   sprintf(outStr, "%ld\t0x%02X\tIMU\t%0.4f\t%0.4f\t%0.4f",
@@ -1103,7 +1127,7 @@ void CAN_AccelMessage(const CANFD_message_t &msg)
   {
     return;
   }
-  LogWriteByte((uint8_t)msg.id);
+  LogWriteByte((uint8_t)0x40);
   LogWrite(imuData.dataBuffer, IMU_SIZE);
 }
 //
@@ -1115,7 +1139,7 @@ void CAN_GPSMessage(const CANFD_message_t &msg)
   memcpy(gpsData.dataBuffer, msg.buf, GPS_SIZE);
   gpsSIV = (int)gpsData.dataStructure.SIV;
   #ifdef DEBUG_EXTRA_VERBOSE
-  sprintf(outStr, "%ld\t0x%02X\tGPS\t%lu\t%d/%d/%d %d:%d:%d\tLAT\t%0.7F\tLONG\t%0.7F\tCOURSE\t%0.5F\tSIV\t%d",
+  sprintf(outStr, "%ld\t0x%02X\tGPS\t%lu\t%d/%d/%d %d:%d:%d\tLAT\t%0.7F\tLONG\t%0.7F\tCOURSE\t%0.5F\tSPEED\t%0.3F\tSIV\t%d",
           millis(),
           (int)msg.id,
           gpsData.dataStructure.timestamp,
@@ -1128,6 +1152,7 @@ void CAN_GPSMessage(const CANFD_message_t &msg)
           (float)gpsData.dataStructure.latitude / 10000000.0F,
           (float)gpsData.dataStructure.longitude / 10000000.0F,
           gpsData.dataStructure.course / 100000.0F,
+          gpsData.dataStructure.speed / 1000.0F,  // ground speed, mm/s -> m/s
           gpsData.dataStructure.SIV);
   Serial.println(outStr);
   #endif

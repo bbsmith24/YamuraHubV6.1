@@ -146,6 +146,23 @@ union IMU_Data
   IMU_Structure dataStructure;
   uint8_t dataBuffer[IMU_SIZE];
 } imuData;
+// accel + gyro - same CAN id (0x40) as accel-only, told apart by message length.
+// Logged with record type 0x41 (the log has no length field).
+#define IMU_GYRO_SIZE 28
+#define IMU_GYRO_LOG_ID 0x41
+struct __attribute__((packed)) IMU_Gyro_Structure
+{
+  unsigned long timestamp;   // 1*4 =  4 bytes
+  float accel[3];            // 3*4 = 12 bytes, g
+  float gyro[3];             // 3*4 = 12 bytes, deg/s
+                             // --------------
+                             // 28 total bytes
+};
+union IMU_Gyro_Data
+{
+  IMU_Gyro_Structure dataStructure;
+  uint8_t dataBuffer[IMU_GYRO_SIZE];
+} imuGyroData;
 
 //
 // GPS structures
